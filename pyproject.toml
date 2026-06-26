@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbita"
+version = "0.1.0"
+description = "A mechanistic predictive engine for probabilistic events — physics, not deep learning."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "chizoalban2003", email = "chizoalban2003@gmail.com" }]
+requires-python = ">=3.10"
+keywords = [
+    "probabilistic-forecasting",
+    "mechanistic-model",
+    "hamiltonian-mechanics",
+    "symplectic-integrator",
+    "bayesian-inference",
+    "interpretable-ml",
+    "physics-based-ml",
+    "prediction-engine",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+]
+calibration = [
+    "jax>=0.4",
+    "numpyro>=0.13",
+]
+
+[project.urls]
+Homepage = "https://github.com/chizoalban2003-beep/Orbita"
+Repository = "https://github.com/chizoalban2003-beep/Orbita"
+Issues = "https://github.com/chizoalban2003-beep/Orbita/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
