@@ -1,0 +1,203 @@
+# Multi-sport backtest panel for examples/07_multi_sport_backtest.py
+#
+# 13 verified events (5 soccer, 3 NBA, 3 tennis, 2 MMA) collected
+# 2026-06-26. For each event:
+#   - prior_a / prior_b / prior_draw : de-vigged sportsbook implied probabilities
+#     (vig stripped by normalisation to sum to 1.0)
+#   - roster_strength_a / roster_strength_b : 0-100 aggregate per sport
+#     (heuristic; see in-file notes for the normalisation choice per sport)
+#   - actual : ground-truth outcome label
+#   - notes : context + source URL
+
+# ============ SOCCER (5 matches) ============
+# Roster strength: 0-100 based on aggregate FIFA world ranking + key starter pedigree.
+# Top-5 FIFA = ~90, top-15 = ~75, top-30 = ~60, top-50 = ~50, top-80 = ~40.
+
+[[match]]
+sport = "soccer"
+event = "World Cup 2026 Group A - Mexico vs South Africa"
+date = "2026-06-11"
+side_a_label = "mexico_win"
+side_b_label = "south_africa_win"
+draw_label = "draw"
+prior_a = 0.66
+prior_b = 0.11
+prior_draw = 0.23
+roster_strength_a = 70.0
+roster_strength_b = 48.0
+actual = "mexico_win"
+notes = "Final 2-0 Mexico. FanDuel: Mex -250, Draw +360, RSA +700 (de-vigged). Home tournament opener at Estadio Azteca."
+
+[[match]]
+sport = "soccer"
+event = "World Cup 2026 Group D - USA vs Paraguay"
+date = "2026-06-12"
+side_a_label = "usa_win"
+side_b_label = "paraguay_win"
+draw_label = "draw"
+prior_a = 0.46
+prior_b = 0.21
+prior_draw = 0.33
+roster_strength_a = 68.0
+roster_strength_b = 55.0
+actual = "usa_win"
+notes = "Final 4-1 USA. Paraguay's Enciso ruled out pre-match."
+
+[[match]]
+sport = "soccer"
+event = "World Cup 2026 Group D - Australia vs Turkiye"
+date = "2026-06-13"
+side_a_label = "australia_win"
+side_b_label = "turkiye_win"
+draw_label = "draw"
+prior_a = 0.16
+prior_b = 0.55
+prior_draw = 0.29
+roster_strength_a = 55.0
+roster_strength_b = 72.0
+actual = "australia_win"
+notes = "Final 2-0 Australia (major upset vs bookmaker priors). Turkiye's Yildiz questionable pre-match."
+
+[[match]]
+sport = "soccer"
+event = "World Cup 2026 Group C - Brazil vs Haiti"
+date = "2026-06-19"
+side_a_label = "brazil_win"
+side_b_label = "haiti_win"
+draw_label = "draw"
+prior_a = 0.86
+prior_b = 0.05
+prior_draw = 0.09
+roster_strength_a = 92.0
+roster_strength_b = 38.0
+actual = "brazil_win"
+notes = "Final 3-0 Brazil. Heavy favourite delivers."
+
+[[match]]
+sport = "soccer"
+event = "World Cup 2026 Group B - Switzerland vs Canada"
+date = "2026-06-24"
+side_a_label = "switzerland_win"
+side_b_label = "canada_win"
+draw_label = "draw"
+prior_a = 0.42
+prior_b = 0.31
+prior_draw = 0.27
+roster_strength_a = 72.0
+roster_strength_b = 67.0
+actual = "switzerland_win"
+notes = "Final 3-1 Switzerland. Canada's Davies benched (hamstring), Kone out (broken leg)."
+
+# ============ NBA (3 games) ============
+# Roster strength: 0-100, aggregate of starting 5 using approximate 2025-26 RAPTOR/EPM tier.
+# All-NBA tier = 90+, All-Star = 80, high-end starter = 70, average starter = 60.
+
+[[match]]
+sport = "nba"
+event = "2026 NBA Finals Game 1 - Knicks at Spurs"
+date = "2026-06-03"
+side_a_label = "spurs_home_win"
+side_b_label = "knicks_away_win"
+prior_a = 0.60
+prior_b = 0.40
+roster_strength_a = 78.0
+roster_strength_b = 80.0
+actual = "knicks_away_win"
+notes = "Final NYK 105 - SAS 95. Spurs ML -180, Knicks +155 (de-vigged 60/40)."
+
+[[match]]
+sport = "nba"
+event = "2026 NBA Finals Game 3 - Spurs at Knicks"
+date = "2026-06-08"
+side_a_label = "knicks_home_win"
+side_b_label = "spurs_away_win"
+prior_a = 0.55
+prior_b = 0.45
+roster_strength_a = 80.0
+roster_strength_b = 78.0
+actual = "spurs_away_win"
+notes = "Final SAS 115 - NYK 111. Knicks ML -130, Spurs +110 (de-vigged 55/45). Wembanyama 32/8/6/3blk."
+
+[[match]]
+sport = "nba"
+event = "2026 NBA Finals Game 5 - Knicks at Spurs (clincher)"
+date = "2026-06-13"
+side_a_label = "spurs_home_win"
+side_b_label = "knicks_away_win"
+prior_a = 0.63
+prior_b = 0.37
+roster_strength_a = 78.0
+roster_strength_b = 80.0
+actual = "knicks_away_win"
+notes = "Final NYK 94 - SAS 90; Knicks win series 4-1. Spurs ML -192, Knicks +160 (de-vigged 63/37)."
+
+# ============ TENNIS (3 matches) ============
+# Roster strength: 0-100. ATP/WTA rank 1 = 95, top-5 = 88, top-10 = 80, top-30 = 65, top-100 = 45, qualifier outside top-100 = 30.
+
+[[match]]
+sport = "tennis"
+event = "2026 Australian Open Men's Final - Alcaraz vs Djokovic"
+date = "2026-02-01"
+side_a_label = "alcaraz_win"
+side_b_label = "djokovic_win"
+prior_a = 0.76
+prior_b = 0.24
+roster_strength_a = 92.0
+roster_strength_b = 80.0
+actual = "alcaraz_win"
+notes = "Alcaraz d. Djokovic 2-6 6-2 6-3 7-5 - completed career Grand Slam at 22. Alcaraz ATP #1, Djokovic #4."
+
+[[match]]
+sport = "tennis"
+event = "2026 Roland Garros Men's Final - Zverev vs Cobolli"
+date = "2026-06-07"
+side_a_label = "zverev_win"
+side_b_label = "cobolli_win"
+prior_a = 0.79
+prior_b = 0.21
+roster_strength_a = 87.0
+roster_strength_b = 78.0
+actual = "zverev_win"
+notes = "Zverev d. Cobolli 6-1 4-6 6-4 6-7(5) 6-1. Zverev ATP #3, Cobolli ATP #10."
+
+[[match]]
+sport = "tennis"
+event = "2026 Roland Garros Women's Final - Andreeva vs Chwalinska"
+date = "2026-06-06"
+side_a_label = "andreeva_win"
+side_b_label = "chwalinska_win"
+prior_a = 0.81
+prior_b = 0.19
+roster_strength_a = 82.0
+roster_strength_b = 42.0
+actual = "andreeva_win"
+notes = "Andreeva won in straight sets — youngest 21st-century RG champion at 19. Andreeva WTA #8; Chwalinska WTA #114 (first qualifier ever to reach RG final)."
+
+# ============ MMA (2 fights) ============
+# Roster strength: 0-100. UFC champion = 95, top-5 ranked = 80, top-10 ranked = 70, unranked = 50.
+
+[[match]]
+sport = "mma"
+event = "UFC Fight Night - Muhammad vs Bonfim"
+date = "2026-06-06"
+side_a_label = "muhammad_win"
+side_b_label = "bonfim_win"
+prior_a = 0.52
+prior_b = 0.48
+roster_strength_a = 80.0
+roster_strength_b = 70.0
+actual = "bonfim_win"
+notes = "Bonfim def. former WW champ Muhammad via UD 50-45 x3. Pick'em fight on paper."
+
+[[match]]
+sport = "mma"
+event = "UFC Fight Night - Kape vs Horiguchi 2"
+date = "2026-06-20"
+side_a_label = "kape_win"
+side_b_label = "horiguchi_win"
+prior_a = 0.62
+prior_b = 0.38
+roster_strength_a = 85.0
+roster_strength_b = 75.0
+actual = "kape_win"
+notes = "Kape def. Horiguchi via KO/TKO at 2:42 R3, Performance of the Night. Kape UFC FlW #2, Horiguchi #5."

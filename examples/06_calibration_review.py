@@ -26,9 +26,12 @@ from math import log
 
 
 # ----- fill these in after the final whistle ------------------------------
-ACTUAL_OUTCOME: str | None = None   # one of "france_win", "draw", "norway_win"
-ACTUAL_SCORE: str | None = None     # e.g. "1-1", "0-2"
-NOTES: str = ""                     # anything we want logged for posterity
+ACTUAL_OUTCOME: str | None = "france_win"
+ACTUAL_SCORE: str | None = "France 4–1 Norway"
+NOTES: str = (
+    "Dembélé hat-trick (2nd-fastest in WC history); Aasgaard for Norway. "
+    "France wins Group I."
+)
 # --------------------------------------------------------------------------
 
 
