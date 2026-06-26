@@ -105,16 +105,71 @@ print("Predicted outcome:", final_well(sol, space))
 - [`examples/03_election_night.py`](examples/03_election_night.py) — Same
   engine, different domain. Two candidate attractors, polling momentum as
   the orbiting body.
+- [`examples/04_market_regime.py`](examples/04_market_regime.py) — Bull vs
+  bear regime forecast; VIX-derived drag.
+- [`examples/05_world_cup_norway_france.py`](examples/05_world_cup_norway_france.py)
+  — Public pre-kickoff World Cup 2026 forecast (Norway vs France).
+- [`examples/05b_norway_france_ablation.py`](examples/05b_norway_france_ablation.py)
+  — Prior-sensitivity ablation isolating priors / momentum / author shift.
+- [`examples/06_calibration_review.py`](examples/06_calibration_review.py) —
+  Post-match scoring of the Norway/France forecast.
+- [`examples/07_multi_sport_backtest.py`](examples/07_multi_sport_backtest.py)
+  — The multi-sport backtest harness. Reproduces the v0.2 results below.
+
+## v0.2 backtest: how the engine actually performs
+
+13 verified head-to-head events across 4 sports (5 soccer, 3 NBA Finals,
+3 tennis, 2 MMA), de-vigged sportsbook priors as input, scored by Brier
+against actual outcomes.
+
+| | bookmaker | engine + templates | engine + roster | engine + α (calibrated) |
+| --- | --- | --- | --- | --- |
+| tennis (3) | 0.092 | **0.007** | **0.004** | 0.091 |
+| mma (2)    | 0.415 | **0.365** | 0.473 | 0.414 |
+| soccer (5) | 0.451 | 0.520 | 0.480 | 0.450 |
+| nba (3)    | 0.706 | 1.209 | 1.209 | 0.709 |
+| **ALL**    | **0.421** | 0.537 | 0.537 | **0.421** |
+
+Two findings, both important and both honest:
+
+1. **Tennis and MMA: the engine beats the market.** With sport-specific
+   templates, priors-only Brier is 0.007 (tennis) and 0.365 (MMA) — better
+   than the bookmaker. These are the regimes the v0.2 physics fits: binary
+   outcomes, calibrated favourites, decisive endings.
+
+2. **Soccer, NBA, and aggregate: the market wins.** The engine
+   systematically over-sharpens its priors, which compounds Brier penalties
+   on upsets (Bonfim over Muhammad, Australia over Türkiye, three Knicks–
+   Spurs Finals upsets). The sharpening calibration (`alpha`) collapsed to
+   ~0.005, meaning *the engine adds essentially no orthogonal signal beyond
+   the bookmaker prior on this panel*. The calibrated forecaster ties the
+   market only because it *is* the market.
+
+This is the diagnostic the calibration loop was designed to produce. It
+tells us the next phase has to be the sensor layer ([issue #2](https://github.com/chizoalban2003-beep/Orbita/issues/2)):
+in-play observations that update the field with information the kickoff
+prior doesn't reflect. Better priors and better geometry have now both
+been tried and capped.
+
+The Norway/France pre-kickoff prediction made before the match
+(France 4–1, headline Brier 0.482 vs bookmaker 0.240) was an honest
+miss — see [`examples/06_calibration_review.py`](examples/06_calibration_review.py)
+and the post-mortem on issue #3.
 
 ## Roadmap
 
 - [x] Symplectic integrator with energy-conservation gate
 - [x] Two-well 2D validation
+- [x] Cross-domain examples (finance, elections, World Cup)
+- [x] Minimum-viable roster layer (players as mass-modifiers, [#1](https://github.com/chizoalban2003-beep/Orbita/issues/1))
+- [x] Sport-specific event-space templates ([#4](https://github.com/chizoalban2003-beep/Orbita/issues/4))
+- [x] Alpha sharpening calibration ([#3](https://github.com/chizoalban2003-beep/Orbita/issues/3))
+- [x] Multi-sport backtest panel and harness
+- [ ] **Sensor layer**: in-play observations as Bayesian updates ([#2](https://github.com/chizoalban2003-beep/Orbita/issues/2))
 - [ ] Drag ontology for soccer (5 intangibles)
-- [ ] RxInfer.jl calibration loop
+- [ ] NumPyro SVI Bayesian calibration loop
 - [ ] WebSocket live-tick ingestion
 - [ ] Three.js + WebGPU visualization client
-- [ ] Cross-domain examples (finance, elections)
 - [ ] Paper: *Hamiltonian Inference for Non-Physical Systems*
 
 ## Related work

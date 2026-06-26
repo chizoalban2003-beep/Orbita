@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional
 
 import numpy as np
 
@@ -53,6 +53,75 @@ class EventSpace:
 
     def __len__(self) -> int:
         return len(self.attractors)
+
+    # ---- sensor layer (issue #2) ---------------------------------------
+
+    def renormalize(self) -> None:
+        """Rescale masses to sum to 1.0 in-place.
+
+        Sensor updates multiply attractor masses; this restores the simplex
+        invariant. Idempotent.
+        """
+        total = sum(a.mass for a in self.attractors)
+        if total <= 0:
+            raise ValueError("Total mass collapsed to <= 0; check sensor "
+                             "likelihoods.")
+        for a in self.attractors:
+            a.mass = a.mass / total
+
+    def apply_observation(
+        self, obs: "Observation", sensor: "Sensor"
+    ) -> None:
+        """Mutate the targeted well's mass according to the sensor's
+        likelihood, then renormalize.
+
+        Sensor likelihood is interpreted as a mass *multiplier*: values
+        above 1 grow the well, below 1 shrink it.
+        """
+        target = sensor.target
+        found = False
+        for a in self.attractors:
+            if a.label == target:
+                a.mass *= sensor.likelihood(obs.value)
+                found = True
+                break
+        if not found:
+            raise KeyError(
+                f"Sensor {sensor.name!r} targets well {target!r}, but no "
+                f"such attractor exists in this EventSpace."
+            )
+        self.renormalize()
+
+
+# ---------------------------------------------------------------------------
+# Sensor layer (Phase-2, issue #2)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Sensor:
+    """A streamed observation source that updates a well's mass posterior.
+
+    The ``likelihood`` callable takes the raw observation value and returns
+    a *mass multiplier* (>1 grows the well, <1 shrinks it). For binary
+    events use a constant multiplier; for continuous signals use a
+    Gaussian kernel or similar.
+
+    Sensors are NOT bodies and NOT wells — they are measurements about
+    the field. See issue #2 for the rationale.
+    """
+
+    name: str
+    target: str
+    likelihood: Callable[[float], float]
+
+
+@dataclass(order=True)
+class Observation:
+    """A single streamed reading: ``sensor`` saw ``value`` at time ``t``."""
+
+    t: float
+    sensor: str
+    value: float
 
 
 @dataclass

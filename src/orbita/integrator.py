@@ -1,11 +1,11 @@
 """Symplectic velocity-Verlet integrator for the Hamiltonian system."""
 from __future__ import annotations
 
-from typing import Optional, Dict
+from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
-from .domain import Body, EventSpace
+from .domain import Body, EventSpace, Observation, Sensor
 from .forces import gravity_force, drag_force
 
 
@@ -16,6 +16,8 @@ def simulate(
     C_d: float = 0.0,
     dt: float = 0.05,
     n_saves: int = 1000,
+    sensors: Optional[Sequence[Sensor]] = None,
+    observations: Optional[Sequence[Observation]] = None,
 ) -> Dict[str, np.ndarray]:
     """Integrate the Hamiltonian system forward using velocity-Verlet.
 
@@ -67,6 +69,12 @@ def simulate(
     p_out[0] = p
     out_i = 1
 
+    # Sensor layer (issue #2): sort observations by time, walk them in
+    # lockstep with the integrator. Empty if not provided — zero overhead.
+    sensors_by_name = {s.name: s for s in (sensors or [])}
+    obs_sorted: List[Observation] = sorted(observations or [], key=lambda o: o.t)
+    obs_idx = 0
+
     # Velocity-Verlet:
     #   p_{n+½} = p_n   + (dt/2) · F(q_n, p_n)
     #   q_{n+1} = q_n   + dt · p_{n+½} / m
@@ -76,6 +84,23 @@ def simulate(
     for step in range(1, n_steps + 1):
         p_half = p + 0.5 * dt * F
         q = q + dt * p_half / m
+
+        # Apply any observations whose timestamp falls in (t-dt, t].
+        # This mutates the well field — the gravity field on the next
+        # step reflects the new posterior masses.
+        t_now = step * dt
+        while obs_idx < len(obs_sorted) and obs_sorted[obs_idx].t <= t_now:
+            obs = obs_sorted[obs_idx]
+            sensor = sensors_by_name.get(obs.sensor)
+            if sensor is None:
+                raise KeyError(
+                    f"Observation references sensor {obs.sensor!r} which "
+                    f"is not in the sensors list."
+                )
+            space.apply_observation(obs, sensor)
+            obs_idx += 1
+        attractors = list(space.attractors)
+
         F = m * gravity_force(q, attractors) + drag_force(p_half, m, C_d)
         p = p_half + 0.5 * dt * F
 
