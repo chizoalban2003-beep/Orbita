@@ -1,0 +1,64 @@
+# Sample player-rating snapshot — for tests and the v0.3.2 demo.
+# A real provider (FBref/Understat/Opta) would populate this from a
+# point-in-time scrape. Schema is documented in
+# src/orbita/providers.py.
+
+[team_strength]
+spain = 88.0
+uruguay = 78.0
+
+[[player]]
+name = "Carvajal"
+team = "spain"
+rating = 84.0
+position = "DEF"
+recent_form = [83.0, 85.0, 84.0, 86.0, 82.0]
+
+[[player]]
+name = "Rodri"
+team = "spain"
+rating = 91.0
+position = "MID"
+recent_form = [90.0, 92.0, 91.5, 90.0, 92.5]
+
+[[player]]
+name = "Yamal"
+team = "spain"
+rating = 89.0
+position = "FWD"
+recent_form = [85.0, 87.0, 89.0, 91.0, 92.0]
+
+[[player]]
+name = "Olmo"
+team = "spain"
+rating = 87.0
+position = "FWD"
+recent_form = [86.0, 87.0, 88.0]
+
+[[player]]
+name = "Araújo"
+team = "uruguay"
+rating = 86.0
+position = "DEF"
+recent_form = [85.0, 86.0, 87.0, 86.0, 85.0]
+
+[[player]]
+name = "Valverde"
+team = "uruguay"
+rating = 88.0
+position = "MID"
+recent_form = [87.0, 89.0, 88.0, 89.0, 88.5]
+
+[[player]]
+name = "Pellistri"
+team = "uruguay"
+rating = 76.0
+position = "FWD"
+available = false                                  # injured
+
+[[player]]
+name = "Núñez"
+team = "uruguay"
+rating = 81.0
+position = "FWD"
+recent_form = [78.0, 80.0, 82.0, 79.0, 83.0]

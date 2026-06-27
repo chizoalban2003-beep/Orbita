@@ -15,7 +15,9 @@ from .domain import (
     Roster,
     Sensor,
     event_space_from_rosters,
+    sensors_from_lineup,
 )
+from .providers import RatingProvider, SnapshotProvider
 from .forces import gravity_force, drag_force, potential_energy, hamiltonian
 from .integrator import simulate, final_well
 from .markets import Forecast, Market, Match
@@ -38,9 +40,12 @@ __all__ = [
     "strategy",
     "Observation",
     "Player",
+    "RatingProvider",
     "Roster",
     "Sensor",
+    "SnapshotProvider",
     "event_space_from_rosters",
+    "sensors_from_lineup",
     "gravity_force",
     "drag_force",
     "potential_energy",

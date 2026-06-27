@@ -239,12 +239,24 @@ class Player:
     Reserve ``team`` for the well label this player contributes to (e.g.
     ``\"france_win\"``). Sports without teams (tennis, boxing) use the player's
     own win-label as the team.
+
+    ``position`` is a free-form string (``"GK"``, ``"DEF"``, ``"MID"``,
+    ``"FWD"`` for soccer; ``"PG"``/``"SG"``/... for NBA; etc.). It only
+    matters when :meth:`Roster.position_weighted_strength` is called.
+
+    ``recent_form`` is the list of recent match grades (newest last) on
+    the same 0–100 scale as ``rating``. Used by
+    :meth:`Roster.with_form_decay` to recompute ratings with an exponential
+    half-life weighting — useful when the season-aggregate rating doesn't
+    reflect a player's current trajectory.
     """
 
     name: str
     team: str
     rating: float          # 0-100; aggregate skill/form going into the event
     available: bool = True
+    position: str = ""
+    recent_form: List[float] = field(default_factory=list)
 
 
 @dataclass
@@ -270,8 +282,76 @@ class Roster:
             return 0.0
         return float(np.mean(active)) / 100.0
 
+    # ---- richer roster signal (issue #8) -------------------------------
+
+    def position_weighted_strength(
+        self, team_label: str, weights: Dict[str, float]
+    ) -> float:
+        """Strength of one side, weighted by player position.
+
+        ``weights`` maps a position string to its relative importance for
+        the market under consideration (e.g. ``{"FWD": 2.0, "MID": 1.0,
+        "DEF": 0.8, "GK": 0.5}`` for an over-2.5 goals market). Missing
+        positions get weight 1.0. Returns a value in [0, 1].
+
+        Falls back to :meth:`strength` if no player on the side has a
+        non-empty ``position`` field — keeps backward compatibility with
+        the v0.2 flat-rating roster.
+        """
+        active = [p for p in self.players
+                  if p.team == team_label and p.available]
+        if not active:
+            return 0.0
+        if not any(p.position for p in active):
+            return self.strength(team_label)
+        num = 0.0
+        den = 0.0
+        for p in active:
+            w = weights.get(p.position, 1.0)
+            num += w * p.rating
+            den += w
+        if den == 0:
+            return 0.0
+        return float(num / den) / 100.0
+
+    def with_form_decay(self, half_life: int = 5) -> "Roster":
+        """Return a new ``Roster`` whose ratings are recomputed from
+        ``recent_form`` with exponential half-life weighting.
+
+        For a player with form list ``[f_0, f_1, ..., f_{n-1}]`` (oldest
+        first), the form-adjusted rating is
+
+            sum_i f_i · 2^{-(n-1-i)/half_life} / sum_i 2^{-(n-1-i)/half_life}
+
+        so the newest game contributes weight 1, a game ``half_life``
+        matches old contributes weight 0.5, and so on. Players with no
+        recent_form data keep their existing rating.
+        """
+        if half_life <= 0:
+            raise ValueError(f"half_life must be > 0, got {half_life}")
+        new_players: List[Player] = []
+        for p in self.players:
+            if not p.recent_form:
+                new_players.append(Player(
+                    name=p.name, team=p.team, rating=p.rating,
+                    available=p.available, position=p.position,
+                    recent_form=list(p.recent_form),
+                ))
+                continue
+            n = len(p.recent_form)
+            weights = [2 ** (-(n - 1 - i) / half_life) for i in range(n)]
+            wsum = sum(weights)
+            decayed = sum(f * w for f, w in zip(p.recent_form, weights)) / wsum
+            new_players.append(Player(
+                name=p.name, team=p.team, rating=float(decayed),
+                available=p.available, position=p.position,
+                recent_form=list(p.recent_form),
+            ))
+        return Roster(players=new_players)
+
     def well_mass_multiplier(
-        self, target: str, opponent: str, share: float = 1.0
+        self, target: str, opponent: str, share: float = 1.0,
+        position_weights: Optional[Dict[str, float]] = None,
     ) -> float:
         """How much to scale the ``target`` win-well's mass.
 
@@ -280,13 +360,58 @@ class Roster:
         ``target`` is the stronger side, and falls below 1 when weaker.
         ``share`` lets the caller down-weight the roster effect (e.g.
         0.3 = "roster only counts for 30% of well mass adjustment").
+        ``position_weights``, if provided, switches the strength
+        calculation to :meth:`position_weighted_strength`.
         """
-        s_t = self.strength(target)
-        s_o = self.strength(opponent)
+        if position_weights is None:
+            s_t = self.strength(target)
+            s_o = self.strength(opponent)
+        else:
+            s_t = self.position_weighted_strength(target, position_weights)
+            s_o = self.position_weighted_strength(opponent, position_weights)
         if s_t + s_o == 0:
             return 1.0
         ratio = 2 * s_t / (s_t + s_o)   # in [0, 2]
         return 1.0 + share * (ratio - 1.0)
+
+
+def sensors_from_lineup(roster: "Roster") -> List["Sensor"]:
+    """Build a default set of in-play sensors keyed to a roster's players.
+
+    For every available player, emits three sensors targeting that
+    player's team well:
+
+        - ``"<name>_goal"`` — multiplier 1.6, the player scored
+        - ``"<name>_red_card"`` — multiplier 0.4, the player was sent off
+        - ``"<name>_subbed_off"`` — multiplier scaled by player rating,
+          a small dip proportional to how much the side relies on them
+
+    These connect the roster layer (#8) to the v0.3 sensor layer (#2):
+    once a real provider supplies the lineup, in-play events tied to
+    specific players can update the well field directly.
+    """
+    sensors: List["Sensor"] = []
+    for p in roster.players:
+        if not p.available:
+            continue
+        sensors.append(Sensor(
+            name=f"{p.name}_goal",
+            target=p.team,
+            likelihood=lambda v, _r=p.rating: 1.6,
+        ))
+        sensors.append(Sensor(
+            name=f"{p.name}_red_card",
+            target=p.team,
+            likelihood=lambda v: 0.4,
+        ))
+        # Heavier reliance → bigger dip when subbed off. Tops out at ~30% dip.
+        dip = 1.0 - 0.30 * (p.rating / 100.0)
+        sensors.append(Sensor(
+            name=f"{p.name}_subbed_off",
+            target=p.team,
+            likelihood=lambda v, _d=dip: _d,
+        ))
+    return sensors
 
 
 def event_space_from_rosters(

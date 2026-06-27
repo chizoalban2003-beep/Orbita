@@ -180,8 +180,10 @@ and the post-mortem on issue #3.
 - [x] Saddle-point detection as confidence/hedge signal ([#6](https://github.com/chizoalban2003-beep/Orbita/issues/6))
 - [x] Strategy layer (Kelly / confidence-weighted Kelly / flat / +EV /
       explicit hedge) ([#7](https://github.com/chizoalban2003-beep/Orbita/issues/7))
-- [ ] Expanded roster: real ratings sourcing, form decay, lineup-level
-      sensors ([#8](https://github.com/chizoalban2003-beep/Orbita/issues/8))
+- [x] Expanded roster API: position weighting, form decay, lineup-level
+      sensors, pluggable `RatingProvider` (TOML snapshot adapter shipped;
+      live FBref/Understat scraper pending follow-up)
+      ([#8](https://github.com/chizoalban2003-beep/Orbita/issues/8))
 - [ ] Drag ontology for soccer (5 intangibles)
 - [ ] NumPyro SVI Bayesian calibration loop
 - [ ] WebSocket live-tick ingestion
