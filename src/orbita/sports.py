@@ -27,44 +27,52 @@ TEMPLATES: Dict[str, Dict] = {
         "positions": {"a": [6.0, 0.0], "b": [-6.0, 0.0]},
         "C_d": 0.02,
         "duration": 400.0,
+        "ic_scale": 1.0,
         "has_draw": False,
         "justification": (
             "Service holds compound; momentum doesn't bleed → low drag. "
             "Best-of-5 sets are decisive → moderate duration. "
-            "No tied final score → 2 wells, no draw."
+            "No tied final score → 2 wells, no draw. Favourites win "
+            "reliably → narrow IC (the prior IS the answer most of the time)."
         ),
     },
     "nba": {
         "positions": {"a": [4.0, 0.0], "b": [-4.0, 0.0]},
         "C_d": 0.08,
         "duration": 800.0,
+        "ic_scale": 2.5,
         "has_draw": False,
         "justification": (
             "Every possession is noise; final score regresses to the prior "
             "→ high drag. 100+ possessions per game → long duration. "
-            "Overtime breaks ties → no draw."
+            "Overtime breaks ties → no draw. One bad shooting night = loss "
+            "→ wide IC (the field carries less information than tennis)."
         ),
     },
     "soccer": {
         "positions": {"a": [5.0, 0.0], "b": [-5.0, 0.0], "draw": [0.0, 5.0]},
         "C_d": 0.04,
         "duration": 600.0,
+        "ic_scale": 2.5,
         "has_draw": True,
         "justification": (
             "90 minutes of chaos but low scoring → mid drag. "
             "Three terminal outcomes → draw well at y=5 (deeper than v0.1's "
-            "y=4, so 0-0 / 1-1 acts as a stable equilibrium not a midpoint)."
+            "y=4, so 0-0 / 1-1 acts as a stable equilibrium not a midpoint). "
+            "Upsets are common (one goal swings it) → wide IC."
         ),
     },
     "mma": {
         "positions": {"a": [7.0, 0.0], "b": [-7.0, 0.0]},
         "C_d": 0.015,
         "duration": 300.0,
+        "ic_scale": 1.0,
         "has_draw": False,
         "justification": (
             "A single decisive blow ends the fight → sharp narrow wells "
             "(far apart) + low drag. 3-5 rounds, often ends early → short "
-            "duration. Draws are statistically negligible → 2 wells."
+            "duration. Draws are statistically negligible → 2 wells. "
+            "Favourites finish → narrow IC."
         ),
     },
 }
@@ -130,4 +138,8 @@ def build_space(
         head_to_head=(side_a_label, side_b_label),
         roster_share=roster_share,
     )
-    return space, {"C_d": t["C_d"], "duration": t["duration"]}
+    return space, {
+        "C_d": t["C_d"],
+        "duration": t["duration"],
+        "ic_scale": t["ic_scale"],
+    }

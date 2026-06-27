@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 
 from .domain import Body, EventSpace, Observation, Sensor
-from .forces import gravity_force, drag_force
+from .forces import SOFTENING, gravity_force, drag_force
 
 
 def simulate(
@@ -18,6 +18,7 @@ def simulate(
     n_saves: int = 1000,
     sensors: Optional[Sequence[Sensor]] = None,
     observations: Optional[Sequence[Observation]] = None,
+    ic_scale: float = 1.0,
 ) -> Dict[str, np.ndarray]:
     """Integrate the Hamiltonian system forward using velocity-Verlet.
 
@@ -41,6 +42,11 @@ def simulate(
         Fixed timestep in seconds.
     n_saves : int
         Number of trajectory points to save (downsampled from dt-stepping).
+    ic_scale : float
+        Carried through from sport templates; consumed by Monte Carlo
+        harnesses that sample initial conditions. Not used by the
+        integrator itself — accepted so ``simulate(**sim_kwargs)`` works
+        when a template-driven harness includes it in the kwargs dict.
 
     Returns
     -------
@@ -122,9 +128,50 @@ def simulate(
 def final_well(sol: Dict[str, np.ndarray], space: EventSpace) -> str:
     """Return the label of the attractor closest to the body's final position.
 
-    Phase 2 will replace this with a soft Bayesian assignment based on local
-    well depth and trajectory curvature.
+    Hard nearest-well classification — useful for visualisation and the
+    legacy demos. For probability accumulation across many MC trials,
+    prefer :func:`final_well_posterior`, which spreads each trial's
+    contribution across wells in proportion to mass-weighted Plummer
+    attraction at the final state. Hard-classify is the v0.2 default
+    and the source of the v0.2 over-sharpening on multi-outcome sports
+    (see ``experiments/01_sharpening_triage.py``).
     """
     q_end = sol["q"][-1]
     dists = [float(np.linalg.norm(q_end - a.position)) for a in space.attractors]
     return space.attractors[int(np.argmin(dists))].label
+
+
+def final_well_posterior(
+    sol: Dict[str, np.ndarray],
+    space: EventSpace,
+    alpha: float = 2.0,
+) -> Dict[str, float]:
+    """Soft assignment of the final state to wells (v0.3.3).
+
+    Each well receives probability proportional to
+    ``mass_k / r_k**alpha``, where ``r_k`` is the Plummer-softened
+    distance from the body's final position to well ``k``. ``alpha``
+    controls sharpness:
+
+    * ``alpha = 0`` — pure mass prior (the final state contributes
+      no information).
+    * ``alpha = 1`` — proportional to gravitational potential magnitude.
+    * ``alpha = 2`` — proportional to gravitational force magnitude
+      (default; the physically natural choice).
+    * ``alpha -> inf`` — collapses to :func:`final_well` (hard
+      nearest-well classification).
+
+    Returns a dict ``label -> probability`` summing to 1.0.
+    """
+    q_end = sol["q"][-1]
+    weights: Dict[str, float] = {}
+    for a in space.attractors:
+        d2 = float(np.sum((q_end - a.position) ** 2)) + SOFTENING ** 2
+        d = float(np.sqrt(d2))
+        weights[a.label] = a.mass / (d ** alpha)
+    total = sum(weights.values())
+    if total <= 0:
+        # Degenerate (alpha=0 + zero mass) — fall back to uniform.
+        n = len(weights)
+        return {label: 1.0 / n for label in weights}
+    return {label: w / total for label, w in weights.items()}

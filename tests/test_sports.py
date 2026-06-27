@@ -66,3 +66,34 @@ def test_mma_wells_are_further_apart_than_nba() -> None:
     mma_a = abs(TEMPLATES["mma"]["positions"]["a"][0])
     nba_a = abs(TEMPLATES["nba"]["positions"]["a"][0])
     assert mma_a > nba_a
+
+
+def test_every_template_carries_ic_scale() -> None:
+    """v0.3.3: per-sport initial-condition spread is a template knob."""
+    for sport, t in TEMPLATES.items():
+        assert "ic_scale" in t, f"{sport} missing ic_scale"
+        assert t["ic_scale"] > 0
+
+
+def test_decisive_sports_have_narrower_ic_than_chance_sports() -> None:
+    """Tennis and MMA are favourite-wins-decisively regimes — narrow IC
+    so the engine trusts the prior. Soccer and NBA are upset-prone —
+    wide IC so the engine spreads its mass instead of over-sharpening
+    onto the favourite."""
+    narrow = max(TEMPLATES["tennis"]["ic_scale"],
+                 TEMPLATES["mma"]["ic_scale"])
+    wide = min(TEMPLATES["soccer"]["ic_scale"],
+               TEMPLATES["nba"]["ic_scale"])
+    assert wide > narrow
+
+
+def test_build_space_returns_ic_scale_in_sim_kwargs() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        space, kw = build_space(
+            "soccer", "a_win", "b_win",
+            prior_a=0.6, prior_b=0.2,
+            prior_draw=0.2, draw_label="draw",
+        )
+    assert "ic_scale" in kw
+    assert kw["ic_scale"] == TEMPLATES["soccer"]["ic_scale"]

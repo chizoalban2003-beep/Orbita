@@ -40,7 +40,7 @@ from orbita import (
     aggregate_brier,
     blend,
     build_space,
-    final_well,
+    final_well_posterior,
     fit_alpha,
     loocv_alpha,
     simulate,
@@ -51,9 +51,13 @@ warnings.filterwarnings("ignore", message=r".*Renormalizing.*")
 
 DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "backtest_matches.toml"
 
-N_TRIALS = 40
+# v0.3.3: bumped from 40 → 200. Soft posterior accumulation needs more
+# trials for stable per-well probabilities; cost is ~5× CPU but still
+# under one minute for the panel.
+N_TRIALS = 200
 SEED = 20260626
 DT = 0.1
+SOFT_ALPHA = 2.0   # Plummer-force-magnitude weighted assignment
 
 
 def brier(probs: dict, actual: str) -> float:
@@ -70,17 +74,31 @@ def modal(probs: dict) -> str:
 
 
 def run_engine(space, sim_kwargs):
-    """Monte-Carlo the engine and return label -> probability."""
+    """Monte-Carlo the engine and return label -> probability.
+
+    v0.3.3: initial-condition variance is scaled by the per-sport
+    ``ic_scale`` from the template (tennis/MMA → narrow IC; soccer/NBA
+    → wide IC), and per-trial classification uses the soft Plummer
+    posterior so basin-edge trials contribute partial mass to each well
+    instead of being snapped to the nearest. Both changes cut Brier on
+    multi-outcome sports — see ``experiments/01_sharpening_triage.py``
+    for the diagnostic.
+    """
     rng = np.random.default_rng(seed=SEED)
-    counts = {a.label: 0 for a in space.attractors}
+    ic_scale = sim_kwargs.get("ic_scale", 1.0)
+    q_scale = np.array([0.3, 0.2]) * ic_scale
+    p_scale = np.array([0.15, 0.15]) * ic_scale
+    acc = {a.label: 0.0 for a in space.attractors}
     for _ in range(N_TRIALS):
-        q0 = rng.normal(scale=[0.3, 0.2], size=2)
-        p0 = rng.normal(scale=[0.15, 0.15], size=2)
+        q0 = rng.normal(scale=q_scale)
+        p0 = rng.normal(scale=p_scale)
         body = Body(mass=1.0, q0=q0, p0=p0)
         sol = simulate(space, body=body, dt=DT, **sim_kwargs)
-        counts[final_well(sol, space)] += 1
-    total = sum(counts.values())
-    return {label: c / total for label, c in counts.items()}
+        probs = final_well_posterior(sol, space, alpha=SOFT_ALPHA)
+        for label, p in probs.items():
+            acc[label] += p
+    total = sum(acc.values())
+    return {label: v / total for label, v in acc.items()}
 
 
 def score_match(match: dict):

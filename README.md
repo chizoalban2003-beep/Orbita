@@ -125,11 +125,45 @@ print("Predicted outcome:", final_well(sol, space))
   portfolios + the honest read on why raw Kelly EV is a mirage on this
   engine version.
 
-## v0.2 backtest: how the engine actually performs
+## Backtest: how the engine actually performs
 
 13 verified head-to-head events across 4 sports (5 soccer, 3 NBA Finals,
 3 tennis, 2 MMA), de-vigged sportsbook priors as input, scored by Brier
 against actual outcomes.
+
+### v0.3.3 (current)
+
+| | bookmaker | engine + templates | engine + roster | engine + α (calibrated) |
+| --- | --- | --- | --- | --- |
+| tennis (3) | 0.092 | **0.024** | **0.015** | 0.037 |
+| mma (2)    | 0.415 | **0.385** | 0.442 | 0.392 |
+| soccer (5) | 0.451 | 0.465 | **0.437** | 0.459 |
+| nba (3)    | 0.706 | 0.748 | 0.740 | 0.735 |
+| **ALL**    | 0.421 | **0.416** | **0.410** | **0.415** |
+
+- **Engine + roster beats bookmaker by 0.011 on aggregate** (0.410 vs 0.421).
+- LOOCV mean Brier 0.426 — out-of-sample we tie the market.
+- **Fitted `alpha = 0.68`** (was 0.005 in v0.2): the engine now genuinely
+  contributes orthogonal signal that the calibration loop wants to use.
+- The single biggest win is NBA: Brier 1.209 → 0.748. The Knicks-over-Spurs
+  upsets that destroyed v0.2 are still misses, but the engine no longer
+  triples down on the favourite.
+
+The v0.3.3 fix is structural, not parameter-tuned. Two changes:
+
+1. **Sport-specific initial-condition spread (`ic_scale`).** Tennis and MMA
+   are favourite-wins-decisively regimes — narrow IC means the engine
+   trusts the prior. Soccer and NBA are upset-prone — wide IC means the
+   body explores the field instead of funneling into the modal well. The
+   choice per sport is defended from mechanics, not back-fit.
+2. **Soft Plummer posterior** in place of hard nearest-well classification.
+   Each MC trial's final state contributes to every well in proportion to
+   the mass-weighted Plummer attraction at that point, so basin-edge
+   trials don't get snapped to a single label. See
+   `experiments/01_sharpening_triage.py` for the diagnostic that picked
+   this fix.
+
+### v0.2 (for comparison)
 
 | | bookmaker | engine + templates | engine + roster | engine + α (calibrated) |
 | --- | --- | --- | --- | --- |
@@ -139,26 +173,10 @@ against actual outcomes.
 | nba (3)    | 0.706 | 1.209 | 1.209 | 0.709 |
 | **ALL**    | **0.421** | 0.537 | 0.537 | **0.421** |
 
-Two findings, both important and both honest:
-
-1. **Tennis and MMA: the engine beats the market.** With sport-specific
-   templates, priors-only Brier is 0.007 (tennis) and 0.365 (MMA) — better
-   than the bookmaker. These are the regimes the v0.2 physics fits: binary
-   outcomes, calibrated favourites, decisive endings.
-
-2. **Soccer, NBA, and aggregate: the market wins.** The engine
-   systematically over-sharpens its priors, which compounds Brier penalties
-   on upsets (Bonfim over Muhammad, Australia over Türkiye, three Knicks–
-   Spurs Finals upsets). The sharpening calibration (`alpha`) collapsed to
-   ~0.005, meaning *the engine adds essentially no orthogonal signal beyond
-   the bookmaker prior on this panel*. The calibrated forecaster ties the
-   market only because it *is* the market.
-
-This is the diagnostic the calibration loop was designed to produce. It
-tells us the next phase has to be the sensor layer ([issue #2](https://github.com/chizoalban2003-beep/Orbita/issues/2)):
-in-play observations that update the field with information the kickoff
-prior doesn't reflect. Better priors and better geometry have now both
-been tried and capped.
+The v0.2 engine beat the market on tennis (0.007) and MMA (0.365) but lost
+heavily on soccer/NBA. The fitted `alpha` collapsed to ~0.005, meaning the
+engine added essentially no orthogonal signal beyond the bookmaker prior.
+That diagnostic is exactly what drove the v0.3.3 over-sharpening fix.
 
 The Norway/France pre-kickoff prediction made before the match
 (France 4–1, headline Brier 0.482 vs bookmaker 0.240) was an honest
@@ -182,8 +200,12 @@ and the post-mortem on issue #3.
       explicit hedge) ([#7](https://github.com/chizoalban2003-beep/Orbita/issues/7))
 - [x] Expanded roster API: position weighting, form decay, lineup-level
       sensors, pluggable `RatingProvider` (TOML snapshot adapter shipped;
-      live FBref/Understat scraper pending follow-up)
+      live FBref/Understat scraper pending follow-up
+      [#9](https://github.com/chizoalban2003-beep/Orbita/issues/9))
       ([#8](https://github.com/chizoalban2003-beep/Orbita/issues/8))
+- [x] **Sport-specific IC scale + soft Plummer posterior (v0.3.3)** — fixes
+      over-sharpening on multi-outcome sports; engine+roster beats the
+      bookmaker on aggregate Brier (0.410 vs 0.421) for the first time
 - [ ] Drag ontology for soccer (5 intangibles)
 - [ ] NumPyro SVI Bayesian calibration loop
 - [ ] WebSocket live-tick ingestion

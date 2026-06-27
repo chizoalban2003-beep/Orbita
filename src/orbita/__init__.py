@@ -19,13 +19,13 @@ from .domain import (
 )
 from .providers import RatingProvider, SnapshotProvider
 from .forces import gravity_force, drag_force, potential_energy, hamiltonian
-from .integrator import simulate, final_well
+from .integrator import simulate, final_well, final_well_posterior
 from .markets import Forecast, Market, Match
 from .sports import TEMPLATES, build_space, template_for
 from . import strategy
 from .strategy import Bet, HedgeBet, Portfolio
 
-__version__ = "0.3.0"
+__version__ = "0.3.3"
 
 __all__ = [
     "Attractor",
@@ -52,6 +52,7 @@ __all__ = [
     "hamiltonian",
     "simulate",
     "final_well",
+    "final_well_posterior",
     "TEMPLATES",
     "build_space",
     "template_for",
