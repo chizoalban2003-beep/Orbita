@@ -110,10 +110,12 @@ def simulate(
             p_out[out_i] = p
             out_i += 1
 
+    confidence = space.confidence(q_out[out_i - 1])
     return {
         "t": t_out[:out_i],
         "q": q_out[:out_i],
         "p": p_out[:out_i],
+        "confidence": float(confidence),
     }
 
 

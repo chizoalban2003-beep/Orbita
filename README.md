@@ -115,6 +115,15 @@ print("Predicted outcome:", final_well(sol, space))
   Post-match scoring of the Norway/France forecast.
 - [`examples/07_multi_sport_backtest.py`](examples/07_multi_sport_backtest.py)
   — The multi-sport backtest harness. Reproduces the v0.2 results below.
+- [`examples/08_sensor_layer.py`](examples/08_sensor_layer.py) — In-play
+  sensor demo: Norway/France replay with synthetic xG + red card. Outcome
+  distribution moves at every event.
+- [`examples/09_today_world_cup.py`](examples/09_today_world_cup.py) —
+  Daily slate forecast: priors-only run for every fixture on the card.
+- [`examples/10_strategy_layer.py`](examples/10_strategy_layer.py) —
+  Multi-market forecast + Kelly / confidence-weighted Kelly / EV
+  portfolios + the honest read on why raw Kelly EV is a mirage on this
+  engine version.
 
 ## v0.2 backtest: how the engine actually performs
 
@@ -165,7 +174,14 @@ and the post-mortem on issue #3.
 - [x] Sport-specific event-space templates ([#4](https://github.com/chizoalban2003-beep/Orbita/issues/4))
 - [x] Alpha sharpening calibration ([#3](https://github.com/chizoalban2003-beep/Orbita/issues/3))
 - [x] Multi-sport backtest panel and harness
-- [ ] **Sensor layer**: in-play observations as Bayesian updates ([#2](https://github.com/chizoalban2003-beep/Orbita/issues/2))
+- [x] **Sensor layer**: in-play observations as Bayesian updates ([#2](https://github.com/chizoalban2003-beep/Orbita/issues/2))
+- [x] Multi-market event-spaces (over/under, BTTS, handicap, joint
+      distribution) ([#5](https://github.com/chizoalban2003-beep/Orbita/issues/5))
+- [x] Saddle-point detection as confidence/hedge signal ([#6](https://github.com/chizoalban2003-beep/Orbita/issues/6))
+- [x] Strategy layer (Kelly / confidence-weighted Kelly / flat / +EV /
+      explicit hedge) ([#7](https://github.com/chizoalban2003-beep/Orbita/issues/7))
+- [ ] Expanded roster: real ratings sourcing, form decay, lineup-level
+      sensors ([#8](https://github.com/chizoalban2003-beep/Orbita/issues/8))
 - [ ] Drag ontology for soccer (5 intangibles)
 - [ ] NumPyro SVI Bayesian calibration loop
 - [ ] WebSocket live-tick ingestion

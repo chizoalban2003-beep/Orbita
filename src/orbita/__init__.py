@@ -18,14 +18,24 @@ from .domain import (
 )
 from .forces import gravity_force, drag_force, potential_energy, hamiltonian
 from .integrator import simulate, final_well
+from .markets import Forecast, Market, Match
 from .sports import TEMPLATES, build_space, template_for
+from . import strategy
+from .strategy import Bet, HedgeBet, Portfolio
 
 __version__ = "0.3.0"
 
 __all__ = [
     "Attractor",
+    "Bet",
     "EventSpace",
     "Body",
+    "Forecast",
+    "HedgeBet",
+    "Market",
+    "Match",
+    "Portfolio",
+    "strategy",
     "Observation",
     "Player",
     "Roster",

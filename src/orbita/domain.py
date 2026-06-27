@@ -7,6 +7,8 @@ from typing import Callable, Dict, Iterable, List, Optional
 
 import numpy as np
 
+from .forces import G, SOFTENING, gravity_force
+
 
 @dataclass
 class Attractor:
@@ -91,6 +93,89 @@ class EventSpace:
                 f"such attractor exists in this EventSpace."
             )
         self.renormalize()
+
+    # ---- saddle / confidence (issue #6) --------------------------------
+
+    def _force_jacobian(self, q: np.ndarray) -> np.ndarray:
+        """Jacobian of the gravity force at ``q``.
+
+        J = ∂F/∂q where F = G·Σ mₐ·(qₐ - q)/rₐ³. Used by Newton iteration
+        to locate critical points of the potential.
+        """
+        J = np.zeros((2, 2))
+        s2 = SOFTENING ** 2
+        for a in self.attractors:
+            delta = a.position - q
+            r2 = float(delta @ delta) + s2
+            r3 = r2 ** 1.5
+            r5 = r2 ** 2.5
+            J += G * a.mass * (
+                -np.eye(2) / r3 + 3 * np.outer(delta, delta) / r5
+            )
+        return J
+
+    def saddle_points(
+        self, tol: float = 1e-8, max_iter: int = 50
+    ) -> List[np.ndarray]:
+        """Locate the saddle points of the gravitational potential.
+
+        Starts a Newton iteration from the midpoint of every attractor
+        pair. Critical points where the force Jacobian has negative
+        determinant are saddles (mixed-sign Hessian of U → unstable
+        equilibrium between basins).
+
+        Returns deduplicated saddle positions.
+        """
+        saddles: List[np.ndarray] = []
+        attrs = self.attractors
+        for i in range(len(attrs)):
+            for j in range(i + 1, len(attrs)):
+                q = 0.5 * (attrs[i].position + attrs[j].position)
+                converged = False
+                for _ in range(max_iter):
+                    F = gravity_force(q, attrs)
+                    if float(F @ F) < tol ** 2:
+                        converged = True
+                        break
+                    J = self._force_jacobian(q)
+                    detJ = np.linalg.det(J)
+                    if abs(detJ) < 1e-14:
+                        break
+                    q = q - np.linalg.solve(J, F)
+                if not converged:
+                    continue
+                J_final = self._force_jacobian(q)
+                # Hessian of U is -J; det(-J) = det(J) for 2x2. Saddle of
+                # U ⇔ det(Hessian) < 0 ⇔ det(J) < 0.
+                if np.linalg.det(J_final) >= 0:
+                    continue
+                # Dedupe against existing saddles.
+                if any(np.linalg.norm(q - s) < 1e-4 for s in saddles):
+                    continue
+                saddles.append(q)
+        return saddles
+
+    def confidence(self, q: np.ndarray) -> float:
+        """Confidence in the well classification of position ``q``.
+
+        Returns a value in [0, 1]: high when ``q`` sits deep inside a
+        single basin, low when ``q`` sits near a saddle between basins
+        (where small perturbations would flip the outcome).
+
+        Defined as ``1 - exp(-d_saddle / d_well)`` where ``d_saddle`` is
+        the distance to the nearest saddle and ``d_well`` is the distance
+        to the nearest attractor.
+        """
+        q = np.asarray(q, dtype=float)
+        saddles = self.saddle_points()
+        if not saddles:
+            return 1.0
+        d_well = min(float(np.linalg.norm(q - a.position))
+                     for a in self.attractors)
+        if d_well < 1e-9:
+            return 1.0
+        d_saddle = min(float(np.linalg.norm(q - s)) for s in saddles)
+        return float(1.0 - np.exp(-d_saddle / d_well))
 
 
 # ---------------------------------------------------------------------------
