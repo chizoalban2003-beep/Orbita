@@ -200,14 +200,22 @@ The same 50-match panel with two architectural extensions:
   market-implied basin in upset-prone matches.
 - **O/U modal hit-rate also beats the market.** Config B gets 62% vs market's
   58% — same direction of travel on a different market.
-- **Brier still favours the market, but the gap closes monotonically** as
-  structure is added: +0.053 (baseline) → +0.038 (multi-market) → +0.024
-  (with players). The remaining gap is a function of (i) IC noise from N=30
-  trials, (ii) the synthetic lineup being random-normal around a team-Elo
-  mean instead of real per-player ratings.
+- **Brier still favours the market on H/D/L, but the gap closes monotonically**
+  as structure is added: +0.053 (baseline) → +0.038 (multi-market) → +0.024
+  (with players).
+- **O/U Brier at N=100 is statistically tied with the market** —
+  experiment 07 reruns Config B at 100 trials/match and finds engine
+  Brier 0.4524 vs market 0.4587, point estimate −0.006 in the engine's
+  favour but bootstrap 90% CI [−0.036, +0.024] **includes zero**. Engine
+  wins on 31/50 individual matches by margin. The headline is
+  market-tie, not market-beat, on this panel.
 - Reproduce with
-  [`experiments/05_player_attractor_panel.py`](experiments/05_player_attractor_panel.py).
-  Single-match teardown at
+  [`experiments/05_player_attractor_panel.py`](experiments/05_player_attractor_panel.py)
+  (panel),
+  [`experiments/06_alpha_blend_sweep.py`](experiments/06_alpha_blend_sweep.py)
+  (blend),
+  [`experiments/07_ou_robustness.py`](experiments/07_ou_robustness.py)
+  (bootstrap CI + LOOCV). Single-match teardown at
   [`experiments/04_player_attractor_prototype.py`](experiments/04_player_attractor_prototype.py).
 
 The v0.3.3 fix is structural, not parameter-tuned. Two changes:

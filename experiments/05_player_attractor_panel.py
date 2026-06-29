@@ -28,6 +28,7 @@ Run with::
 from __future__ import annotations
 
 import csv
+import hashlib
 import importlib.util
 import sys
 import warnings
@@ -37,6 +38,14 @@ from math import log
 from pathlib import Path
 
 import numpy as np
+
+
+def _stable_seed(s: str) -> int:
+    """Deterministic 32-bit seed from a string. ``hash()`` in CPython is
+    salted per-process by PYTHONHASHSEED, which makes synthetic lineups
+    non-reproducible across runs."""
+    return int.from_bytes(hashlib.md5(s.encode("utf-8")).digest()[:4],
+                          byteorder="little")
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -150,7 +159,7 @@ PLAYER_MASS_NORM = 600.0
 def synth_lineup(team: str, x_sign: int, team_rating: float) -> list:
     """Deterministic-by-team synthetic 4-3-3. seeded by team name so the
     same lineup is reproduced every run."""
-    rng = np.random.default_rng(seed=hash(team) & 0xFFFFFFFF)
+    rng = np.random.default_rng(seed=_stable_seed(team))
     out = []
     for role, count, (y_lo, y_hi) in ROLES:
         for _ in range(count):
