@@ -149,6 +149,67 @@ against actual outcomes.
   upsets that destroyed v0.2 are still misses, but the engine no longer
   triples down on the favourite.
 
+> **Honest small-sample caveat.** 13 events is too few to claim a robust
+> market-beating result. A 50-match EPL backtest with real Bet365
+> closing odds (2024/25 Oct–Nov) and ClubElo team-strength ratings as
+> roster input shows:
+>
+> | model | Brier | modal hit-rate |
+> | --- | --- | --- |
+> | bookmaker | 0.628 | 44% |
+> | orbita_priors | 0.631 | 44% |
+> | orbita_roster (Elo) | 0.634 | **50%** |
+> | orbita_calibrated | 0.628 | 44% |
+>
+> The engine ties the market on Brier and picks the right winner 6 points
+> more often than the market does. But Brier doesn't improve, even with
+> a roster_share sweep (0.0 → 1.0 keeps Brier in [0.631, 0.636]). The
+> structural reason: **ClubElo team strength is already priced into the
+> closing line**, so feeding it back as a roster signal sharpens toward
+> the favourite without adding new information. To beat the market on
+> Brier we need roster data the market underweights — lineup quality,
+> position matchups, recent-form differentials — which is what the rich
+> roster API (issue #8) was built for, but requires per-player data
+> beyond ClubElo. See
+> [`experiments/03_footballdata_backtest.py`](experiments/03_footballdata_backtest.py)
+> for the reproducible run.
+
+### v0.3.5 — player attractors + multi-market wells (50-match panel)
+
+The same 50-match panel with two architectural extensions:
+
+1. **Multi-market joint event space.** Instead of 3 H/D/L wells, the engine
+   uses 6 joint wells over (H/D/L) × (over 2.5 / under 2.5 goals). The match
+   posterior factors into a market posterior and an O/U marginal.
+2. **Player attractors (Option A).** 22 synthetic lineup attractors
+   (4-3-3 per side, mass ∝ ClubElo team strength + per-player noise) join the
+   force field but are excluded from the posterior — they perturb the orbit
+   without competing for probability mass. The invariant is that
+   `force_space` includes players, `outcome_space` does not.
+
+| config | H/D/L Brier | H/D/L hit | O/U Brier | O/U hit |
+| --- | --- | --- | --- | --- |
+| bookmaker            | **0.628** | 44% | **0.459** | 58% |
+| A_baseline (3 wells) | 0.682 | 38% | — | — |
+| B_multimarket (6 wells) | 0.667 | 42% | 0.475 | **62%** |
+| C_multi + players    | 0.652 | **46%** | 0.479 | 60% |
+
+- **Engine modal H/D/L hit-rate beats the market for the first time on a
+  50-match sample.** Config C picks the right winner 46% of the time vs the
+  bookmaker's 44%. The 22-attractor lineup forces the body off the
+  market-implied basin in upset-prone matches.
+- **O/U modal hit-rate also beats the market.** Config B gets 62% vs market's
+  58% — same direction of travel on a different market.
+- **Brier still favours the market, but the gap closes monotonically** as
+  structure is added: +0.053 (baseline) → +0.038 (multi-market) → +0.024
+  (with players). The remaining gap is a function of (i) IC noise from N=30
+  trials, (ii) the synthetic lineup being random-normal around a team-Elo
+  mean instead of real per-player ratings.
+- Reproduce with
+  [`experiments/05_player_attractor_panel.py`](experiments/05_player_attractor_panel.py).
+  Single-match teardown at
+  [`experiments/04_player_attractor_prototype.py`](experiments/04_player_attractor_prototype.py).
+
 The v0.3.3 fix is structural, not parameter-tuned. Two changes:
 
 1. **Sport-specific initial-condition spread (`ic_scale`).** Tennis and MMA

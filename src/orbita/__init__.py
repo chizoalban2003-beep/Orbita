@@ -17,7 +17,12 @@ from .domain import (
     event_space_from_rosters,
     sensors_from_lineup,
 )
-from .providers import RatingProvider, SnapshotProvider
+from .providers import (
+    RatingProvider,
+    SnapshotProvider,
+    UnderstatMatch,
+    UnderstatMatchProvider,
+)
 from .forces import gravity_force, drag_force, potential_energy, hamiltonian
 from .integrator import simulate, final_well, final_well_posterior
 from .markets import Forecast, Market, Match
