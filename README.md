@@ -203,20 +203,53 @@ The same 50-match panel with two architectural extensions:
 - **Brier still favours the market on H/D/L, but the gap closes monotonically**
   as structure is added: +0.053 (baseline) → +0.038 (multi-market) → +0.024
   (with players).
-- **O/U Brier at N=100 is statistically tied with the market** —
-  experiment 07 reruns Config B at 100 trials/match and finds engine
-  Brier 0.4524 vs market 0.4587, point estimate −0.006 in the engine's
-  favour but bootstrap 90% CI [−0.036, +0.024] **includes zero**. Engine
-  wins on 31/50 individual matches by margin. The headline is
-  market-tie, not market-beat, on this panel.
-- Reproduce with
-  [`experiments/05_player_attractor_panel.py`](experiments/05_player_attractor_panel.py)
-  (panel),
-  [`experiments/06_alpha_blend_sweep.py`](experiments/06_alpha_blend_sweep.py)
-  (blend),
-  [`experiments/07_ou_robustness.py`](experiments/07_ou_robustness.py)
-  (bootstrap CI + LOOCV). Single-match teardown at
-  [`experiments/04_player_attractor_prototype.py`](experiments/04_player_attractor_prototype.py).
+- **O/U Brier at N=100 is statistically tied with the market on this 50-match
+  window** — experiment 07 reruns Config B at 100 trials/match and finds
+  engine Brier 0.4524 vs market 0.4587, point estimate −0.006 in the
+  engine's favour, bootstrap 90% CI [−0.036, +0.024] including zero.
+
+### v0.3.5 — full-season reality check (380 matches)
+
+Experiment 08 scales the panel to **every 2024/25 EPL fixture** (380
+matches, B365 closing odds). The Oct–Nov "tie on O/U" does **not** hold:
+
+| config | HDA Brier | HDA hit | O/U Brier | O/U hit |
+| --- | --- | --- | --- | --- |
+| bookmaker        | **0.579** | **54%** | **0.484** | 57% |
+| A_baseline (3w)  | 0.608 | 46% | — | — |
+| B_multimarket    | 0.623 | 45% | 0.532 | **58%** |
+
+Bootstrap 90% CI on per-match (engine − market) deltas:
+
+| config | HDA Δ | HDA CI | O/U Δ | O/U CI |
+| --- | --- | --- | --- | --- |
+| A_baseline    | +0.029 | [+0.006, +0.053] | — | — |
+| B_multimarket | +0.044 | [+0.025, +0.065] | +0.048 | [+0.025, +0.071] |
+
+**Both deltas have CIs strictly excluding zero — the closing line wins
+on Brier with statistical significance on a full season.** The 50-match
+Oct–Nov panel was a non-representative window. The only metric the engine
+still wins on is O/U modal hit-rate (58% vs 57%), which is too close to
+call.
+
+**Read this honestly:** an efficient closing line is a high bar, and the
+current configuration — vanilla Hamiltonian wells + ClubElo team strength
++ synthetic per-player lineups — does not clear it on a full EPL season.
+The architectural extensions (multi-market joint wells, player
+attractors) are sound; the data inputs are not informative enough beyond
+what's already priced into the line. **The pitch is interpretability and
+mechanism, not market-beating accuracy. Don't claim what we can't show.**
+
+Reproduce with
+[`experiments/05_player_attractor_panel.py`](experiments/05_player_attractor_panel.py)
+(50-match panel),
+[`experiments/06_alpha_blend_sweep.py`](experiments/06_alpha_blend_sweep.py)
+(blend),
+[`experiments/07_ou_robustness.py`](experiments/07_ou_robustness.py)
+(50-match bootstrap CI + LOOCV),
+[`experiments/08_full_season_panel.py`](experiments/08_full_season_panel.py)
+(full 380-match season). Single-match teardown at
+[`experiments/04_player_attractor_prototype.py`](experiments/04_player_attractor_prototype.py).
 
 The v0.3.3 fix is structural, not parameter-tuned. Two changes:
 
