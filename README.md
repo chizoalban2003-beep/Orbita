@@ -251,6 +251,40 @@ Reproduce with
 (full 380-match season). Single-match teardown at
 [`experiments/04_player_attractor_prototype.py`](experiments/04_player_attractor_prototype.py).
 
+### v0.3.5 — niche markets (corners, cards, BTTS)
+
+football-data.co.uk doesn't publish closing odds for corners/cards/BTTS,
+so experiment 09 scores three statistical baselines and the engine
+against actuals on the full 2024/25 EPL season:
+
+| market         | uniform | league_poisson | team_rolling (K=5) | engine |
+| -------------- | ------: | -------------: | -----------------: | -----: |
+| corners > 9.5  | 0.500 | **0.482** | 0.587 | 0.629 |
+| cards > 4.5    | 0.500 | **0.483** | 0.519 | 0.522 |
+| BTTS           | 0.500 | **0.489** | 0.562 | 0.599 |
+
+Bootstrap 90% CI of (engine − team_rolling) per-match deltas:
+
+* corners: +0.042 [+0.024, +0.060]   — team_rolling wins
+* cards:   +0.002 [−0.017, +0.020]   — tied
+* btts:    +0.037 [+0.016, +0.058]   — team_rolling wins
+
+**Two counter-results worth surfacing:**
+
+1. **The engine adds no signal on derivative markets.** A 2-well event
+   space initialised with the rolling-Poisson prior and a small Elo skew
+   produces, on average, a *noisier* version of its own prior. Without
+   richer per-match inputs (lineups, in-play observations, possession
+   style), the simulation has nothing physical to base a non-trivial
+   re-weighting on.
+2. **league_poisson — which uses no per-team information at all — beats
+   team_rolling on every market.** Rolling K=5 over-fits short-term
+   variance; shrinkage toward the league mean is a meaningful win on
+   these noisy small-count outcomes.
+
+Reproduce with
+[`experiments/09_niche_markets_panel.py`](experiments/09_niche_markets_panel.py).
+
 The v0.3.3 fix is structural, not parameter-tuned. Two changes:
 
 1. **Sport-specific initial-condition spread (`ic_scale`).** Tennis and MMA
