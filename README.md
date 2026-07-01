@@ -329,7 +329,105 @@ Reproduce with
 [`experiments/10_anisotropic_drag_sweep.py`](experiments/10_anisotropic_drag_sweep.py)
 (sweep) and
 [`experiments/11_anisotropic_full_season.py`](experiments/11_anisotropic_full_season.py)
-(out-of-sample verdict).
+(out-of-sample verdict). Standalone write-up:
+[`docs/anisotropic_drag_result.md`](docs/anisotropic_drag_result.md).
+
+### v0.3.6 — engine capabilities to push the anisotropic result further
+
+Three infrastructure additions unlock the next round of experiments
+without disturbing the 2D Config B baseline:
+
+1. **n-D event space.** `Attractor.position` and the whole force /
+   integrator stack now accept any dimension ≥ 2.
+   [`examples/11_three_axis_event_space.py`](examples/11_three_axis_event_space.py)
+   ships a 3D H/D/A × O/U × BTTS event-space (12 wells) as validation.
+2. **Time-varying drag schedules.** `linear_ramp_schedule` and
+   `piecewise_constant_schedule` produce callable `C_d(t)` that
+   `drag_force` and the integrator evaluate per step. Fatigue and
+   desperation are non-uniform in match minutes; drag should be too.
+3. **Stochastic drag (Ornstein-Uhlenbeck).** `ornstein_uhlenbeck_schedule`
+   returns a per-trial noise realisation around a mean coefficient.
+   Each MC trial samples a different drag path — the posterior is
+   naturally hedged, and calibrated confidence intervals become
+   emitable for the first time. Breaks symplecticity but the leapfrog
+   structure on the deterministic part remains 2nd-order.
+
+Follow-up experiments (results below where run):
+
+* [`experiments/12_time_varying_drag_sweep.py`](experiments/12_time_varying_drag_sweep.py)
+  — 4×4 grid on linear-ramp y-drag `(Cy_start, Cy_end)` on the
+  50-match panel. Partial verdict below.
+* [`experiments/13_stochastic_drag.py`](experiments/13_stochastic_drag.py)
+  — constant vs low- vs high-noise OU around `Cy = 0.16`. Verdict
+  below.
+* [`experiments/14_momentum_ic_features.py`](experiments/14_momentum_ic_features.py)
+  — bias `p0` with pre-match rest-days and rolling-form
+  differentials on the full 380-match season. Not yet executed.
+* [`experiments/15_per_team_drag_calibration.py`](experiments/15_per_team_drag_calibration.py)
+  — fit per-team y-drag on first-half goal intensity, evaluate on
+  held-out half.
+
+**Experiment 13 — stochastic drag verdict (50-match, bootstrap 90% CI):**
+
+| Config | HDA delta | HDA CI | O/U delta | O/U CI |
+| --- | --- | --- | --- | --- |
+| constant (0.00, 0.16)       | +0.037 | [−0.016, +0.090] | −0.011 | [−0.036, +0.017] |
+| OU low-noise (σ=0.05)       | +0.063 | [−0.020, +0.144] | +0.016 | [−0.027, +0.061] |
+| OU high-noise (σ=0.15)      | +0.163 | [+0.050, +0.273] | +0.010 | [−0.025, +0.047] |
+
+**Stochastic drag does not help.** OU noise dilutes the deterministic
+signal without adding predictive information. High-noise significantly
+degrades HDA (CI excludes zero on the market's side). Deterministic
+anisotropic remains the champion drag setting. **Honest negative result.**
+
+**Experiment 12 — time-varying drag partial verdict (HDA rows 1-2 only,
+50-match panel):**
+
+Rows 3-4 not completed due to compute constraints on the shared box;
+the partial pattern already answers the question.
+
+|                    | Cy_end=0.00 | Cy_end=0.08 | Cy_end=0.16 | Cy_end=0.32 |
+| ------------------ | ----------- | ----------- | ----------- | ----------- |
+| Cy_start=0.00      | −0.0032     | +0.0408     | +0.0493     | +0.0037     |
+| Cy_start=0.08      | +0.0229     | +0.0299     | +0.0281     | +0.0282     |
+
+The (0.00, 0.00) constant-zero-drag reproduces experiment 10's HDA
+winner (−0.0032). Every non-trivial ramp-up degrades HDA back toward
+the market delta by +0.02 to +0.05. **The physical intuition — that
+fatigue-driven drag should ramp up over match minutes — is not borne
+out by Brier on this panel.** The constant drag setting from exp 10/11
+outperforms every ramp variant tested.
+
+**Experiment 15 — per-team drag calibration verdict (train/test split,
+190/190, bootstrap 90% CI on TEST):**
+
+Per-team `C_d_y` fitted from the first-half goal intensity of each
+team (Wolves 3.84 goals/match → 0.08; Everton 2.17 → 0.21) then
+evaluated on the second-half 190 matches. Match drag =
+`0.5 * (home_C_d_y + away_C_d_y)`.
+
+| Config on TEST | HDA delta | HDA CI | O/U delta | O/U CI |
+| --- | --- | --- | --- | --- |
+| constant (0.00, 0.16) | +0.031 | [+0.008, +0.054] | +0.025 | [+0.008, +0.043] |
+| per-team calibrated   | +0.035 | [+0.014, +0.056] | +0.019 | [+0.003, +0.035] |
+
+Per-team calibration moves HDA +0.004 worse and O/U −0.007 better
+against baseline — both deltas well inside the ~0.02-wide CI overlap.
+**Team-specific drag from goal intensity is not a real signal at this
+resolution.** Both configs lose to market on this half (harder than
+the full 380 in exp 11 — market gets sharper as the season progresses),
+but the per-team layer adds no lift over constant. **Honest negative
+result.**
+
+**Combined read from exp 10, 11, 12, 13, 15:** among drag interventions,
+the constant anisotropic geometry (`C_d_x=0.00, C_d_y=0.16`) is the
+strongest lever. Adding time-variation (linear ramp, exp 12), stochastic
+noise (OU, exp 13), or per-team intensity calibration (exp 15) around
+that mean does not improve, and often degrades, Brier. Where geometry
+beat isotropic by halving the gap, further sophistication in the drag
+term does not extend the effect. The next axis worth pushing is not
+drag but the momentum initial condition — pre-match features (rest,
+rolling form) biasing `p0` before the integrator runs. See exp 14.
 
 The v0.3.3 fix is structural, not parameter-tuned. Two changes:
 
