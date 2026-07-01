@@ -59,6 +59,7 @@ def simulate(
         body = Body(p0=np.array([0.5, 0.3]))
 
     attractors = list(space.attractors)
+    dim = body.q0.shape[0]
     n_steps = int(duration / dt)
     save_every = max(1, n_steps // n_saves)
     n_out = (n_steps // save_every) + 1
@@ -68,8 +69,8 @@ def simulate(
     m = body.mass
 
     t_out = np.zeros(n_out)
-    q_out = np.zeros((n_out, 2))
-    p_out = np.zeros((n_out, 2))
+    q_out = np.zeros((n_out, dim))
+    p_out = np.zeros((n_out, dim))
 
     q_out[0] = q
     p_out[0] = p
@@ -85,7 +86,7 @@ def simulate(
     #   p_{n+½} = p_n   + (dt/2) · F(q_n, p_n)
     #   q_{n+1} = q_n   + dt · p_{n+½} / m
     #   p_{n+1} = p_{n+½} + (dt/2) · F(q_{n+1}, p_{n+½})
-    F = m * gravity_force(q, attractors) + drag_force(p, m, C_d)
+    F = m * gravity_force(q, attractors) + drag_force(p, m, C_d, t=0.0)
 
     for step in range(1, n_steps + 1):
         p_half = p + 0.5 * dt * F
@@ -107,7 +108,7 @@ def simulate(
             obs_idx += 1
         attractors = list(space.attractors)
 
-        F = m * gravity_force(q, attractors) + drag_force(p_half, m, C_d)
+        F = m * gravity_force(q, attractors) + drag_force(p_half, m, C_d, t=t_now)
         p = p_half + 0.5 * dt * F
 
         if step % save_every == 0 and out_i < n_out:

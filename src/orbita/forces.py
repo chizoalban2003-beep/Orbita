@@ -14,9 +14,9 @@ def gravity_force(q: np.ndarray, attractors: Iterable) -> np.ndarray:
     """Sum of Newtonian forces from every attractor on a body at position ``q``.
 
     Uses Plummer softening so the force stays finite as the body approaches
-    a well centre.
+    a well centre. Works in any dimension >= 2 — the loop is coordinate-free.
     """
-    F = np.zeros(2)
+    F = np.zeros_like(q)
     for a in attractors:
         r = a.position - q
         d2 = float(r @ r) + SOFTENING ** 2
@@ -33,7 +33,7 @@ def potential_energy(q: np.ndarray, attractors: Iterable) -> float:
     return U
 
 
-def drag_force(p: np.ndarray, body_mass: float, C_d) -> np.ndarray:
+def drag_force(p: np.ndarray, body_mass: float, C_d, t: float = 0.0) -> np.ndarray:
     """Linear drag — the simplest non-conservative force.
 
     ``C_d`` may be:
@@ -43,14 +43,121 @@ def drag_force(p: np.ndarray, body_mass: float, C_d) -> np.ndarray:
       along the x- and y-axes of event space. Useful when the event
       geometry has a directional asymmetry (e.g. soccer's home/away
       axis carries directional momentum, the draw axis does not).
+    * a callable ``C_d(t) -> scalar | length-2 array`` — time-varying
+      drag schedule. Physically meaningful for events with non-uniform
+      time structure: fatigue accumulates late, desperation reverses
+      near the whistle, etc. The integrator evaluates ``C_d`` at the
+      appropriate half-step time — leapfrog remains 2nd-order accurate.
 
     Note: enabling drag turns the system from conservative to dissipative.
     The energy-conservation validation gate must be run with ``C_d == 0``.
     """
+    if callable(C_d):
+        C_d = C_d(t)
     coef = np.asarray(C_d, dtype=float)
     if coef.ndim == 0:
         return -float(coef) * (p / body_mass)
     return -coef * (p / body_mass)
+
+
+def linear_ramp_schedule(C_start, C_end, duration: float):
+    """Piecewise-linear drag schedule from ``C_start`` at t=0 to ``C_end`` at
+    t=duration.
+
+    Both endpoints may be scalar or length-2 array. Returned closure is
+    passed as ``C_d=`` to :func:`orbita.simulate` or the fast Verlet kernel.
+    """
+    C_start = np.asarray(C_start, dtype=float)
+    C_end = np.asarray(C_end, dtype=float)
+    inv_d = 1.0 / duration
+
+    def schedule(t: float):
+        u = min(max(t * inv_d, 0.0), 1.0)
+        return C_start * (1.0 - u) + C_end * u
+    return schedule
+
+
+def piecewise_constant_schedule(knots):
+    """Piecewise-constant drag schedule.
+
+    ``knots`` is an iterable of ``(t_start, C_d)`` pairs sorted by
+    ``t_start``; the last pair applies for all ``t >= t_start``. E.g.::
+
+        piecewise_constant_schedule([
+            (0.0,    np.array([0.0, 0.08])),   # first hour: light y-drag
+            (3600.0, np.array([0.0, 0.24])),   # last 30 min: heavy y-drag
+        ])
+    """
+    knots = sorted(knots, key=lambda kv: kv[0])
+    ts = np.array([k[0] for k in knots])
+    vals = [np.asarray(k[1], dtype=float) for k in knots]
+
+    def schedule(t: float):
+        # rightmost knot with t_start <= t
+        i = int(np.searchsorted(ts, t, side="right") - 1)
+        i = max(0, min(i, len(vals) - 1))
+        return vals[i]
+    return schedule
+
+
+def ornstein_uhlenbeck_schedule(
+    C_mean,
+    theta: float,
+    sigma: float,
+    dt: float,
+    seed: int | None = None,
+    clip_min: float = 0.0,
+):
+    """Stochastic drag: Ornstein-Uhlenbeck process around a mean coefficient.
+
+    ``C(t+dt) = C(t) + theta * (C_mean - C(t)) * dt + sigma * sqrt(dt) * eta``
+
+    where ``eta ~ N(0, I)``. Returned closure caches the last-evaluated
+    ``(t, C)`` and steps forward only when ``t`` advances — leapfrog calls
+    ``C_d(t)`` twice per step (once at t_now, once at t_now again for the
+    half-step momentum update) and we want both calls to see the same
+    stochastic realisation.
+
+    Breaks symplecticity (drag is non-conservative *and* now noisy).
+    Solver becomes Euler-Maruyama-flavoured Verlet: the leapfrog structure
+    on the deterministic part remains 2nd-order in dt, and the stochastic
+    perturbation is O(sqrt(dt)) as expected for an SDE.
+
+    Parameters
+    ----------
+    C_mean : scalar or length-2 array
+        Long-run mean drag.
+    theta : float
+        Reversion rate. theta * duration >~ 3 for the process to sample its
+        stationary distribution over a match.
+    sigma : float
+        Noise volatility per unit time.
+    dt : float
+        Integrator step size; used to size the noise increment.
+    seed : int, optional
+        RNG seed. If None, uses the global default_rng — sim is not
+        deterministic.
+    clip_min : float
+        Lower clip on the drag coefficient (negative drag = thrust; the
+        engine supports it but at high magnitudes it can blow up).
+    """
+    C_mean = np.asarray(C_mean, dtype=float)
+    rng = np.random.default_rng(seed)
+    sqrt_dt = float(np.sqrt(dt))
+    state = {"t": -1.0, "C": C_mean.copy()}
+
+    def schedule(t: float):
+        if t > state["t"] + 0.5 * dt:
+            # step the SDE forward
+            eta = rng.standard_normal(size=C_mean.shape)
+            state["C"] = (
+                state["C"] + theta * (C_mean - state["C"]) * dt
+                + sigma * sqrt_dt * eta
+            )
+            state["C"] = np.maximum(state["C"], clip_min)
+            state["t"] = t
+        return state["C"]
+    return schedule
 
 
 def hamiltonian(

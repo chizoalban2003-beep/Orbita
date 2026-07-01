@@ -24,9 +24,10 @@ class Attractor:
 
     def __post_init__(self) -> None:
         self.position = np.asarray(self.position, dtype=float)
-        if self.position.shape != (2,):
+        if self.position.ndim != 1 or self.position.shape[0] < 2:
             raise ValueError(
-                f"position must be shape (2,), got {self.position.shape}"
+                f"position must be shape (n,) with n>=2, got "
+                f"{self.position.shape}"
             )
 
 
@@ -102,7 +103,8 @@ class EventSpace:
         J = ∂F/∂q where F = G·Σ mₐ·(qₐ - q)/rₐ³. Used by Newton iteration
         to locate critical points of the potential.
         """
-        J = np.zeros((2, 2))
+        n = q.shape[0]
+        J = np.zeros((n, n))
         s2 = SOFTENING ** 2
         for a in self.attractors:
             delta = a.position - q
@@ -110,7 +112,7 @@ class EventSpace:
             r3 = r2 ** 1.5
             r5 = r2 ** 2.5
             J += G * a.mass * (
-                -np.eye(2) / r3 + 3 * np.outer(delta, delta) / r5
+                -np.eye(n) / r3 + 3 * np.outer(delta, delta) / r5
             )
         return J
 
@@ -224,8 +226,12 @@ class Body:
             self.p0 = np.zeros(2)
         self.q0 = np.asarray(self.q0, dtype=float)
         self.p0 = np.asarray(self.p0, dtype=float)
-        if self.q0.shape != (2,) or self.p0.shape != (2,):
-            raise ValueError("q0 and p0 must each be shape (2,)")
+        if self.q0.shape != self.p0.shape or self.q0.ndim != 1 \
+                or self.q0.shape[0] < 2:
+            raise ValueError(
+                f"q0 and p0 must be matching 1D arrays of length >= 2, "
+                f"got q0.shape={self.q0.shape}, p0.shape={self.p0.shape}"
+            )
 
 
 # ---------------------------------------------------------------------------

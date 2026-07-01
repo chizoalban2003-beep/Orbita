@@ -80,25 +80,34 @@ def fast_final_q(
     m_body: float = 1.0,
     soft: float = SOFTENING,
 ) -> np.ndarray:
-    """``C_d`` may be a scalar (isotropic) or a length-2 array
-    (anisotropic, per-axis). Matches :func:`orbita.forces.drag_force`."""
+    """``C_d`` may be a scalar (isotropic), a length-2 array (anisotropic,
+    per-axis), or a callable ``C_d(t) -> scalar | length-2``. Matches
+    :func:`orbita.forces.drag_force`."""
     n_steps = int(duration / dt)
     soft2 = soft * soft
     q = q0.astype(float).copy()
     p = p0.astype(float).copy()
     mass_col = masses[:, None]
-    cd = np.asarray(C_d, dtype=float)
+    is_callable = callable(C_d)
+    cd_static = None if is_callable else np.asarray(C_d, dtype=float)
 
     def grav(qv: np.ndarray) -> np.ndarray:
         r = positions - qv
         d2 = np.einsum("ij,ij->i", r, r) + soft2
         return (mass_col * r / d2[:, None] ** 1.5).sum(axis=0)
 
-    F = m_body * grav(q) - cd * (p / m_body)
+    def cd_at(t: float) -> np.ndarray:
+        if is_callable:
+            return np.asarray(C_d(t), dtype=float)
+        return cd_static
+
+    t = 0.0
+    F = m_body * grav(q) - cd_at(t) * (p / m_body)
     for _ in range(n_steps):
         p_half = p + 0.5 * dt * F
         q = q + dt * p_half / m_body
-        F = m_body * grav(q) - cd * (p_half / m_body)
+        t += dt
+        F = m_body * grav(q) - cd_at(t) * (p_half / m_body)
         p = p_half + 0.5 * dt * F
     return q
 
