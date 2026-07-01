@@ -240,6 +240,12 @@ attractors) are sound; the data inputs are not informative enough beyond
 what's already priced into the line. **The pitch is interpretability and
 mechanism, not market-beating accuracy. Don't claim what we can't show.**
 
+> **Update:** anisotropic drag (`C_d_x=0.00, C_d_y=0.16`) halves both
+> losses on the same panel — HDA +0.044 → +0.025, O/U +0.048 → +0.020.
+> Market still wins with statistical significance, but the gap is
+> closing from geometry alone, before any input-data upgrades. See the
+> anisotropic-drag section below.
+
 Reproduce with
 [`experiments/05_player_attractor_panel.py`](experiments/05_player_attractor_panel.py)
 (50-match panel),
@@ -284,6 +290,46 @@ Bootstrap 90% CI of (engine − team_rolling) per-match deltas:
 
 Reproduce with
 [`experiments/09_niche_markets_panel.py`](experiments/09_niche_markets_panel.py).
+
+### v0.3.5 — anisotropic drag (halves the full-season loss)
+
+The H/D/L event-space has a directional asymmetry that isotropic drag
+ignores:
+
+* **x-axis** = home/away win axis. Momentum here is directional
+  pressure — a side that's pressing.
+* **y-axis** = draw / goals axis. Drift here is not directional; it's
+  the body being pulled into the central well.
+
+Experiment 10 sweeps `C_d = (C_d_x, C_d_y)` on a 5×5 grid over the
+50-match panel; experiment 11 tests the sweep's winner out-of-sample on
+the full 380-match season.
+
+Full-season 380-match Brier vs market (Config B, engine − market;
+bootstrap 90% CI, N=30 trials/match):
+
+| drag | HDA Δ | HDA CI | O/U Δ | O/U CI |
+| --- | --- | --- | --- | --- |
+| isotropic (0.04) | +0.044 | [+0.025, +0.065] | +0.048 | [+0.025, +0.071] |
+| **anisotropic (0.00, 0.16)** | **+0.025** | [+0.008, +0.043] | **+0.020** | [+0.007, +0.033] |
+
+**Anisotropic drag ~halves the market's Brier lead on both markets.**
+Zero x-drag preserves directional momentum through win-side wells;
+heavy y-drag dampens noise on the goals axis. Both CIs still exclude
+zero on the market's side — the closing line still wins — but the gap
+closed from +0.048 to +0.020 on O/U without changing a single input,
+just the drag geometry.
+
+The 50-match sweep found −0.010 as the O/U point estimate for
+(0.00, 0.16); on 380 matches out-of-sample the honest number is
++0.020. The 50-match win was noise-inflated but the *direction* of the
+effect is real and holds under statistical scrutiny.
+
+Reproduce with
+[`experiments/10_anisotropic_drag_sweep.py`](experiments/10_anisotropic_drag_sweep.py)
+(sweep) and
+[`experiments/11_anisotropic_full_season.py`](experiments/11_anisotropic_full_season.py)
+(out-of-sample verdict).
 
 The v0.3.3 fix is structural, not parameter-tuned. Two changes:
 

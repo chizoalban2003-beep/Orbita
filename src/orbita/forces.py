@@ -33,13 +33,24 @@ def potential_energy(q: np.ndarray, attractors: Iterable) -> float:
     return U
 
 
-def drag_force(p: np.ndarray, body_mass: float, C_d: float) -> np.ndarray:
-    """Isotropic linear drag — the simplest non-conservative force.
+def drag_force(p: np.ndarray, body_mass: float, C_d) -> np.ndarray:
+    """Linear drag — the simplest non-conservative force.
+
+    ``C_d`` may be:
+
+    * a scalar — isotropic drag (the v0.1 default).
+    * a length-2 array — anisotropic drag with separate coefficients
+      along the x- and y-axes of event space. Useful when the event
+      geometry has a directional asymmetry (e.g. soccer's home/away
+      axis carries directional momentum, the draw axis does not).
 
     Note: enabling drag turns the system from conservative to dissipative.
     The energy-conservation validation gate must be run with ``C_d == 0``.
     """
-    return -C_d * (p / body_mass)
+    coef = np.asarray(C_d, dtype=float)
+    if coef.ndim == 0:
+        return -float(coef) * (p / body_mass)
+    return -coef * (p / body_mass)
 
 
 def hamiltonian(
