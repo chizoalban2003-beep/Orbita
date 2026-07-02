@@ -536,9 +536,37 @@ is architecturally live. No exp 10-15 result speaks to in-play — but
 also no market of in-play odds is available in
 football-data.co.uk to score against yet.
 
-**Experiment 18** (running): does the 12-well 3D H/D/A × O/U × BTTS
-joint posterior encode outcome correlation better than three
-independent 2D models on the same 380 matches? Verdict pending.
+**Experiment 18 — 3D joint 12-well vs 2D-independent verdict
+(bootstrap 90% CI on match-level Brier deltas, sign = 3D worse):**
+
+| axis | Brier 3D | Brier 2D / null | Δ | 90% CI | verdict |
+| --- | --- | --- | --- | --- | --- |
+| H/D/A | 0.6198 | 0.6043 | +0.0158 | [-0.0080, +0.0379] | tied (CI ∋ 0) |
+| O/U 2.5 | 0.5096 | 0.5040 | +0.0057 | [-0.0009, +0.0124] | tied (CI ∋ 0) |
+| BTTS | 0.6412 | 0.4952 (Poisson null) | +0.1462 | [+0.1070, +0.1845] | **null beats 3D** |
+
+Coupling axes through joint priors + shared trajectories does not
+extract outcome correlation on 380 matches — the H/D/A and O/U
+marginals of the 3D solution are point-estimate-worse than the
+2D-independent cache, though CIs cross zero. BTTS is decisive: the
+Poisson-independence null (deriving P(BTTS) from λ inferred from
+P(over 2.5)) beats the 3D marginal by 0.146 Brier with CI clear of
+zero. Two structural reads: (i) the joint mass allocation absorbs
+signal that the 2D marginals concentrate cleanly; (ii) BTTS
+correlation with total goals is genuinely close to the Poisson
+factorisation, so the mechanistic joint has to actively *avoid*
+distorting it — which it doesn't. This closes the "does joint
+mechanics carry correlation the market can't price" question in the
+negative for this event grammar. Cache written to
+`experiments/_cache_18_3d_posteriors.csv`.
+
+*Structural read across exp 16-18:* the engine's surviving
+market-participation angles are the alpha-blend interior optimum at
+α≈0.12 on H/D/A (exp 17), the in-play kick as a live-state posterior
+update (v0.3.7 addition), and a lower MCE (0.104 vs 0.170) on H/D/A
+than the market (exp 16). No axis where the standalone engine beats
+the market on Brier or ECE, on this football-data.co.uk B365 EPL
+panel.
 
 The v0.3.3 fix is structural, not parameter-tuned. Two changes:
 
