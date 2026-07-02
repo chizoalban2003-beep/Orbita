@@ -362,7 +362,7 @@ Follow-up experiments (results below where run):
   below.
 * [`experiments/14_momentum_ic_features.py`](experiments/14_momentum_ic_features.py)
   — bias `p0` with pre-match rest-days and rolling-form
-  differentials on the full 380-match season. Not yet executed.
+  differentials on the full 380-match season. Verdict below.
 * [`experiments/15_per_team_drag_calibration.py`](experiments/15_per_team_drag_calibration.py)
   — fit per-team y-drag on first-half goal intensity, evaluate on
   held-out half.
@@ -419,15 +419,38 @@ the full 380 in exp 11 — market gets sharper as the season progresses),
 but the per-team layer adds no lift over constant. **Honest negative
 result.**
 
-**Combined read from exp 10, 11, 12, 13, 15:** among drag interventions,
-the constant anisotropic geometry (`C_d_x=0.00, C_d_y=0.16`) is the
-strongest lever. Adding time-variation (linear ramp, exp 12), stochastic
-noise (OU, exp 13), or per-team intensity calibration (exp 15) around
-that mean does not improve, and often degrades, Brier. Where geometry
-beat isotropic by halving the gap, further sophistication in the drag
-term does not extend the effect. The next axis worth pushing is not
-drag but the momentum initial condition — pre-match features (rest,
-rolling form) biasing `p0` before the integrator runs. See exp 14.
+**Experiment 14 — biased p0 from pre-match features verdict (full
+380-match season, bootstrap 90% CI):**
+
+Same anisotropic drag `(0.00, 0.16)` as baseline. `p0` biased with
+`LAMBDA_X * (form_adv + 0.2*rest_adv) + LAMBDA_Y * (goals_recent - 2.7)`,
+where form_adv is the K=5 rolling goal-differential differential
+and rest_adv is the rest-days differential.
+
+| Config on full 380 | HDA delta | HDA CI | O/U delta | O/U CI |
+| --- | --- | --- | --- | --- |
+| unbiased p0 (baseline)   | +0.025 | [+0.008, +0.043] | +0.020 | [+0.008, +0.033] |
+| biased p0 (form + rest + goal intensity) | +0.025 | [+0.008, +0.041] | +0.020 | [+0.007, +0.033] |
+
+**Bias moves both deltas by less than 0.001 — complete CI overlap.**
+Pre-match rest days, rolling K=5 form, and recent goal intensity —
+the three cheap public features football-data.co.uk ships — are
+already priced into the closing line. Biasing the momentum IC with
+them adds no material signal on either market. **Honest negative
+result.**
+
+**Combined read from exps 10, 11, 12, 13, 14, 15:** among drag AND
+initial-condition interventions, the constant anisotropic geometry
+(`C_d_x=0.00, C_d_y=0.16`) with unbiased `p0` is the strongest
+mechanistic configuration we can reach with public pre-match inputs.
+Time-varying drag (exp 12), stochastic drag (exp 13), per-team drag
+calibration (exp 15), and biased-p0 from rest/form/intensity (exp 14)
+all fail to extend the effect. **The remaining path to closing the
+gap on Brier is data the market underweights — real per-player
+ratings, injury/lineup information, in-play sensor data — not further
+re-parametrisation of the mechanistic core.** The engine's value on
+public pre-match data is interpretability and honest posterior
+uncertainty, not accuracy beyond the closing line.
 
 The v0.3.3 fix is structural, not parameter-tuned. Two changes:
 
