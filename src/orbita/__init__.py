@@ -32,13 +32,19 @@ from .forces import (
     potential_energy,
     hamiltonian,
 )
-from .integrator import simulate, final_well, final_well_posterior
+from .integrator import (
+    simulate,
+    simulate_from_state,
+    kick,
+    final_well,
+    final_well_posterior,
+)
 from .markets import Forecast, Market, Match
 from .sports import TEMPLATES, build_space, template_for
 from . import strategy
 from .strategy import Bet, HedgeBet, Portfolio
 
-__version__ = "0.3.6"
+__version__ = "0.3.7"
 
 __all__ = [
     "Attractor",
@@ -67,6 +73,8 @@ __all__ = [
     "potential_energy",
     "hamiltonian",
     "simulate",
+    "simulate_from_state",
+    "kick",
     "final_well",
     "final_well_posterior",
     "TEMPLATES",

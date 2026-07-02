@@ -42,3 +42,5 @@ ENV/
 
 docs/_build/
 docs/site/
+
+experiments/_cache_*.csv

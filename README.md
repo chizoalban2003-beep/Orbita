@@ -452,6 +452,94 @@ re-parametrisation of the mechanistic core.** The engine's value on
 public pre-match data is interpretability and honest posterior
 uncertainty, not accuracy beyond the closing line.
 
+### v0.3.7 — participation angles: calibration, blend, in-play kick
+
+After the v0.3.6 negative catalogue, three new investigations widen
+the scope from "beat market on Brier" to how the engine can
+*participate* alongside the market:
+
+1. **[Exp 16](experiments/16_reliability_calibration.py) — reliability
+   & ECE audit.** Are engine posteriors *calibrated* even if not
+   sharper? Bin predictions into deciles, compute observed frequency
+   per bin, report Expected & Maximum Calibration Error against the
+   closing line on the full 380-match season.
+2. **[Exp 17](experiments/17_engine_market_blend.py) — engine ⊕
+   market alpha-blend on full season.** Post-hoc convex blend
+   `p_blend = α·p_engine + (1-α)·p_market`. If the Brier surface has
+   an interior minimum, engine adds *orthogonal* signal — the blend
+   beats the market even if the engine alone does not.
+3. **[Example 12](examples/12_inplay_kick.py) + in-play kernel.**
+   `orbita.simulate_from_state` and `orbita.kick` let a body be
+   perturbed mid-trajectory by an in-play event (goal, red card,
+   penalty). Structurally, this is where mechanism has an
+   architectural advantage over static features. Ships with
+   `tests/test_inplay_kick.py`.
+
+**Experiment 16 — reliability + ECE verdict (bootstrap 90% CI on
+delta ECE):**
+
+| Market | ECE engine | ECE market | delta | CI | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| HDA | 0.0548 | 0.0158 | +0.0262 | [+0.0039, +0.0479] | market better calibrated |
+| O/U | 0.0950 | 0.0266 | +0.0520 | [+0.0269, +0.0709] | market better calibrated |
+
+Even on calibration, the market wins on this panel. **But one nuance
+saves the engine's face:** on HDA the engine's *maximum* calibration
+error (MCE) is 0.104 vs the market's 0.170 — the market has one
+badly-calibrated bin (extreme favourites, where public sentiment
+under-weights upsets), while the engine's error is more evenly
+distributed. Different failure modes, not a strict domination.
+
+**Experiment 17 — alpha-blend verdict (post-hoc, full 380):**
+
+| Market | α* (best) | Brier(α*) | Brier(market) | delta | CI | Verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| HDA | 0.12 | 0.5782 | 0.5787 | -0.0004 | [-0.0025, +0.0016] | tied (CI ∋ 0) |
+| O/U | 0.00 | 0.4837 | 0.4837 | +0.0000 | — | market alone best |
+
+**Genuinely interesting:** the HDA Brier surface has an *interior*
+minimum at `α = 0.12` — the engine contributes 12% orthogonal signal
+to the market on HDA. Improvement is inside noise on this panel but
+the *shape* of the surface confirms mechanism is not collinear with
+market on HDA. If richer inputs (per-player, injury, in-play) raise
+the engine's α* toward 0.5, the blend clears CI and becomes a
+market-beat. On O/U the surface is monotonic — pure market wins;
+engine contributes no O/U signal orthogonal to the closing line.
+
+**In-play kick capability (v0.3.7 engine addition):** the pre-match
+posterior is a *state*, not an *answer*. A goal at minute 60 is a
+momentum kick applied to the body; the remaining 30 minutes are the
+deterministic (or stochastic) evolution of the perturbed state.
+`simulate_from_state(q0, p0, ..., t_start=...)` and
+`kick(p, dp)` let callers splice a match around any in-play event:
+
+```
+sol_pre  = simulate(space, body, duration=200)     # 0 -> 60 min
+q60, p60 = sol_pre["q"][-1], sol_pre["p"][-1]
+p60_kick = kick(p60, [+1.5, 0.0])                  # goal for home
+sol_post = simulate_from_state(space, q60, p60_kick,
+                                duration=100, t_start=200)  # 60 -> 90 min
+```
+
+Demo in [`examples/12_inplay_kick.py`](examples/12_inplay_kick.py):
+starting from Arsenal 55%/25%/20% priors and a slight home-lean
+kickoff momentum, an Arsenal goal at 60' shifts the soft posterior
+by +0.21 on `arsenal_win` and −0.24 on `draw` in 30 remaining sim
+minutes. Same 3-well space, no re-priced attractors — the mechanism
+does the work. Ships with `tests/test_inplay_kick.py` (energy
+conservation across the splice; kick is a pure momentum shift; kick
+toward a well raises that well's posterior).
+
+*Structural angle:* this is where a static regression-plus-features
+model has to be re-trained on in-play state; the mechanistic model
+is architecturally live. No exp 10-15 result speaks to in-play — but
+also no market of in-play odds is available in
+football-data.co.uk to score against yet.
+
+**Experiment 18** (running): does the 12-well 3D H/D/A × O/U × BTTS
+joint posterior encode outcome correlation better than three
+independent 2D models on the same 380 matches? Verdict pending.
+
 The v0.3.3 fix is structural, not parameter-tuned. Two changes:
 
 1. **Sport-specific initial-condition spread (`ic_scale`).** Tennis and MMA

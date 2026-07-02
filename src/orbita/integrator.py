@@ -126,6 +126,89 @@ def simulate(
     }
 
 
+def simulate_from_state(
+    space: EventSpace,
+    q0: np.ndarray,
+    p0: np.ndarray,
+    body_mass: float = 1.0,
+    duration: float = 2700.0,
+    C_d: float = 0.0,
+    dt: float = 0.05,
+    n_saves: int = 500,
+    t_start: float = 0.0,
+) -> Dict[str, np.ndarray]:
+    """Continue a simulation from an explicit ``(q0, p0)`` state.
+
+    Same physics as :func:`simulate` but takes the initial state
+    directly and returns the trajectory. Callers can:
+
+    1. Sample a body with :func:`simulate` up to some minute of match
+       time, take ``sol["q"][-1], sol["p"][-1]``, apply an in-play
+       event (goal, red card) as a momentum kick via :func:`kick`,
+       and hand the perturbed state to this function for the remaining
+       minutes.
+    2. Score the sensitivity of the posterior to in-play events without
+       re-running from t=0.
+
+    Time-varying ``C_d`` (callable) is evaluated at absolute time
+    ``t_start + step*dt`` so schedules continue coherently across
+    a spliced simulation.
+
+    Returns the same dict shape as :func:`simulate`.
+    """
+    attractors = list(space.attractors)
+    dim = q0.shape[0]
+    n_steps = int(duration / dt)
+    save_every = max(1, n_steps // n_saves)
+    n_out = (n_steps // save_every) + 1
+
+    q = np.asarray(q0, dtype=float).copy()
+    p = np.asarray(p0, dtype=float).copy()
+    m = float(body_mass)
+
+    t_out = np.zeros(n_out)
+    q_out = np.zeros((n_out, dim))
+    p_out = np.zeros((n_out, dim))
+    t_out[0] = t_start
+    q_out[0] = q
+    p_out[0] = p
+    out_i = 1
+
+    F = m * gravity_force(q, attractors) + drag_force(p, m, C_d, t=t_start)
+    for step in range(1, n_steps + 1):
+        p_half = p + 0.5 * dt * F
+        q = q + dt * p_half / m
+        t_now = t_start + step * dt
+        F = m * gravity_force(q, attractors) + drag_force(p_half, m, C_d, t=t_now)
+        p = p_half + 0.5 * dt * F
+        if step % save_every == 0 and out_i < n_out:
+            t_out[out_i] = t_now
+            q_out[out_i] = q
+            p_out[out_i] = p
+            out_i += 1
+
+    confidence = space.confidence(q_out[out_i - 1])
+    return {
+        "t": t_out[:out_i],
+        "q": q_out[:out_i],
+        "p": p_out[:out_i],
+        "confidence": float(confidence),
+    }
+
+
+def kick(p: np.ndarray, dp: np.ndarray) -> np.ndarray:
+    """Apply an instantaneous momentum kick.
+
+    In-play events (goals, red cards, penalties) are naturally modelled
+    as impulsive changes to the body's momentum. This is an explicit
+    helper so callers write ``kick(p, [+0.5, -0.2])`` instead of
+    inlining ``p + np.array(...)`` and mixing up sign conventions.
+
+    Returns a new array — does not mutate ``p``.
+    """
+    return np.asarray(p, dtype=float) + np.asarray(dp, dtype=float)
+
+
 def final_well(sol: Dict[str, np.ndarray], space: EventSpace) -> str:
     """Return the label of the attractor closest to the body's final position.
 
