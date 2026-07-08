@@ -60,6 +60,53 @@ def drag_force(p: np.ndarray, body_mass: float, C_d, t: float = 0.0) -> np.ndarr
     return -coef * (p / body_mass)
 
 
+def tidal_force(
+    q: np.ndarray,
+    grav_F: np.ndarray,
+    t: float,
+    duration: float,
+    kappa: float,
+    lam: float,
+) -> np.ndarray:
+    """Game-state tidal stretch along the goals (y) axis.
+
+    A body approaching a *decisive* result well (a home/away win, on the
+    x-axis) late in the event experiences a tidal force: the structural
+    integrity of the match state stretches along the orthogonal
+    goals-axis, deepening whichever over/under well the state already
+    leans toward. This is the mechanism a static closing line struggles
+    to price — the non-linear tipping point of a chasing team abandoning
+    shape as time runs out.
+
+    Magnitude couples two things:
+
+    * **result decisiveness** — ``|grav_F[0]|``, the x-component of the
+      gravitational pull. Large when the body is committed toward a
+      home/away well, ~0 near a still-open (central) state. This is the
+      discrete analogue of ``∂U_wdl/∂r`` in the hypothesis: the harder
+      the result is being decided, the stronger the tidal strain.
+    * **time pressure** — ``exp(lam·(t/duration − 1))``, an exponential
+      desperation ramp: ≈ ``e^{-lam}`` at kickoff, exactly 1 at the final
+      whistle. Desperation scales exponentially as time runs out.
+
+    Direction is ``sign(q_y)`` — it stretches the body *further* along the
+    axis it already occupies, so the reached over/under well is deepened
+    and widened rather than shifted. Vanishes at ``q_y = 0`` (an undecided
+    goals state) and at ``kappa = 0`` (force off — the identity that keeps
+    every pre-tidal result reproducible).
+
+    Returns a force vector with only a y-component; x is untouched so the
+    result-axis dynamics are unchanged.
+    """
+    out = np.zeros_like(q)
+    if kappa == 0.0:
+        return out
+    ramp = np.exp(lam * (t / duration - 1.0))
+    strain = abs(float(grav_F[0]))
+    out[1] = kappa * strain * ramp * np.sign(q[1])
+    return out
+
+
 def linear_ramp_schedule(C_start, C_end, duration: float):
     """Piecewise-linear drag schedule from ``C_start`` at t=0 to ``C_end`` at
     t=duration.

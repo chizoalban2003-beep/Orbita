@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 
 from .domain import Body, EventSpace, Observation, Sensor
-from .forces import SOFTENING, gravity_force, drag_force
+from .forces import SOFTENING, gravity_force, drag_force, tidal_force
 
 
 def simulate(
@@ -136,6 +136,7 @@ def simulate_from_state(
     dt: float = 0.05,
     n_saves: int = 500,
     t_start: float = 0.0,
+    tidal: Optional[tuple] = None,
 ) -> Dict[str, np.ndarray]:
     """Continue a simulation from an explicit ``(q0, p0)`` state.
 
@@ -154,6 +155,13 @@ def simulate_from_state(
     ``t_start + step*dt`` so schedules continue coherently across
     a spliced simulation.
 
+    ``tidal``, when given, is a ``(kappa, lam)`` pair enabling the
+    game-state tidal stretch (:func:`orbita.forces.tidal_force`). The
+    exponential time ramp is referenced to the absolute final time
+    ``t_start + duration`` so it peaks at the whistle regardless of how
+    much of the match this spliced segment covers. ``None`` (default)
+    reproduces the pre-tidal dynamics exactly.
+
     Returns the same dict shape as :func:`simulate`.
     """
     attractors = list(space.attractors)
@@ -165,6 +173,7 @@ def simulate_from_state(
     q = np.asarray(q0, dtype=float).copy()
     p = np.asarray(p0, dtype=float).copy()
     m = float(body_mass)
+    t_final = t_start + duration
 
     t_out = np.zeros(n_out)
     q_out = np.zeros((n_out, dim))
@@ -174,12 +183,19 @@ def simulate_from_state(
     p_out[0] = p
     out_i = 1
 
-    F = m * gravity_force(q, attractors) + drag_force(p, m, C_d, t=t_start)
+    def total_force(qv, pv, tv):
+        g = gravity_force(qv, attractors)
+        F = m * g + drag_force(pv, m, C_d, t=tv)
+        if tidal is not None:
+            F = F + m * tidal_force(qv, g, tv, t_final, tidal[0], tidal[1])
+        return F
+
+    F = total_force(q, p, t_start)
     for step in range(1, n_steps + 1):
         p_half = p + 0.5 * dt * F
         q = q + dt * p_half / m
         t_now = t_start + step * dt
-        F = m * gravity_force(q, attractors) + drag_force(p_half, m, C_d, t=t_now)
+        F = total_force(q, p_half, t_now)
         p = p_half + 0.5 * dt * F
         if step % save_every == 0 and out_i < n_out:
             t_out[out_i] = t_now
