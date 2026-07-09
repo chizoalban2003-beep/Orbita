@@ -25,7 +25,9 @@ def test_entry_is_replayable_and_gradient_ready(tmp_path):
     for k in ("softening", "alpha", "dt", "duration", "seed", "n_trials",
               "well_home", "engine_version"):
         assert k in st["constants"]
-    assert "base" in e["forecast"] and "counterfactual" in e["forecast"]
+    assert all(k in e["forecast"] for k in ("engine_base", "engine_cf", "projection"))
+    # projection = market + engine delta: home cut moves the priced line off market
+    assert e["forecast"]["projection"]["away"] > e["market"]["priors"]["away"]
     assert e["read"]["scenario"] == "injury" and e["read"]["severity"] == 0.25
 
 
@@ -35,7 +37,7 @@ def test_settle_computes_brier_and_edge(tmp_path):
     rec = ledger.settle(eid, "away", path=p)
     e = ledger.load(p)["entry"][0]
     assert rec["brier_market"] == round(ledger.brier(e["market"]["priors"], "away"), 6)
-    assert rec["brier_orbita"] == round(ledger.brier(e["forecast"]["counterfactual"], "away"), 6)
+    assert rec["brier_orbita"] == round(ledger.brier(e["forecast"]["projection"], "away"), 6)
     assert rec["edge_vs_market"] == round(rec["brier_market"] - rec["brier_orbita"], 6)
 
 

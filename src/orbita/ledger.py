@@ -122,6 +122,18 @@ def _physical_state(priors, iv, seed, n_trials) -> Dict:
             "C_d": float(C_d), "lock": lock, "constants": constants}
 
 
+def project(market: Dict[str, float], engine_base: Dict[str, float],
+            engine_cf: Dict[str, float]) -> Dict[str, float]:
+    """The priced line: apply the engine's directional intervention DELTA to the
+    market's calibrated marginals. The market owns the marginals (exp 22-24); the
+    engine contributes only the shift (exp 25). Using the raw engine forecast
+    instead would pay a marginal-distortion penalty unrelated to the read.
+    Clipped and renormalised to a valid distribution."""
+    raw = {k: max(0.0, market[k] + (engine_cf[k] - engine_base[k])) for k in _LAB}
+    s = sum(raw.values()) or 1.0
+    return {k: raw[k] / s for k in _LAB}
+
+
 def _read_summary(iv: Optional[Intervention], side: str) -> Dict:
     scenario = iv.name.split(":")[0] if iv else "none"
     out = {"scenario": scenario, "side": side,
@@ -147,6 +159,7 @@ def log_read(match: str, odds: Dict[str, float], iv: Optional[Intervention],
     priors = devig(odds)
     base = forecast(priors, None, n_trials=n_trials, seed=seed)
     cf = forecast(priors, iv, n_trials=n_trials, seed=seed) if iv else dict(base)
+    proj = project(priors, base, cf) if iv else dict(priors)
     slug = "".join(c if c.isalnum() else "-" for c in match.lower())[:32].strip("-")
     entry_id = f"{_now()}-{slug}"
     entry = {
@@ -157,8 +170,9 @@ def log_read(match: str, odds: Dict[str, float], iv: Optional[Intervention],
                    "source": source},
         "read": _read_summary(iv, side),
         "state": _physical_state(priors, iv, seed, n_trials),
-        "forecast": {"base": {k: round(float(base[k]), 6) for k in _LAB},
-                     "counterfactual": {k: round(float(cf[k]), 6) for k in _LAB}},
+        "forecast": {"engine_base": {k: round(float(base[k]), 6) for k in _LAB},
+                     "engine_cf": {k: round(float(cf[k]), 6) for k in _LAB},
+                     "projection": {k: round(float(proj[k]), 6) for k in _LAB}},
     }
     _append(path, "entry", entry)
     return entry_id
@@ -174,9 +188,10 @@ def settle(entry_id: str, result: str, *, score: str = "",
     if entry is None:
         raise KeyError(f"no entry with id {entry_id!r}")
     mkt = entry["market"]["priors"]
-    base = entry["forecast"]["base"]
-    cf = entry["forecast"]["counterfactual"]
-    b_mkt, b_base, b_orb = brier(mkt, result), brier(base, result), brier(cf, result)
+    fc = entry["forecast"]
+    b_mkt = brier(mkt, result)
+    b_base = brier(fc["engine_base"], result)
+    b_orb = brier(fc["projection"], result)          # the priced line = market + engine delta
     rec = {"entry_id": entry_id, "result": result, "score": score,
            "brier_market": round(b_mkt, 6), "brier_base": round(b_base, 6),
            "brier_orbita": round(b_orb, 6),

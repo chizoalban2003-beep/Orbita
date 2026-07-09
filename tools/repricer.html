@@ -194,6 +194,7 @@
         <span style="color:var(--home)">● Home</span><span style="color:var(--draw)">● Draw</span><span style="color:var(--away)">● Away</span>
       </div>
 
+      <div class="flab" style="margin:14px 0 4px">Priced line <b style="color:var(--cf)">— your read</b> &nbsp;vs&nbsp; <b style="color:var(--base)">market</b> <span style="color:var(--faint)">(bar = your line, tick = market)</span></div>
       <div class="bars" id="bars"></div>
       <div class="sentence" id="sentence"></div>
     </section>
@@ -279,11 +280,12 @@ function buildIv(scn,side,amt,pr){
 const cap=s=>s[0].toUpperCase()+s.slice(1);
 const pct=x=>Math.round(x*100)+"%";
 /* scenario slider config: [label, min, max, default, scaleTo(0..1 amt)] */
-const SCN={
-  injury:{lab:"Severity",min:5,max:45,def:20,f:v=>v/100},
-  red:{lab:"Severity",min:5,max:45,def:15,f:v=>v/100},
-  low:{lab:"Lock strength",min:5,max:60,def:15,f:v=>v/100},
-  early:{lab:"Pressure",min:20,max:100,def:60,f:v=>v/100},
+const SCN={   // ranges tightened to each lever's sensitive band (the lock and
+              // early-pressure levers are potent — narrow range = fine control)
+  injury:{lab:"Severity",min:3,max:40,def:15,f:v=>v/100},
+  red:{lab:"Severity",min:5,max:40,def:15,f:v=>v/100},
+  low:{lab:"Lock strength",min:3,max:30,def:10,f:v=>v/100},
+  early:{lab:"Pressure",min:10,max:60,def:30,f:v=>v/100},
 };
 
 /* ---------- state + wiring ---------- */
@@ -303,17 +305,23 @@ function recompute(){
   const {iv,desc}=buildIv(scn,side,amt,pr);
   const base=forecast(pr,null,NTR,42);
   const after=forecast(pr,iv,NTR,42);
-  renderBars(base,after);
-  renderSentence(base,after,desc);
-  drawField(pr,iv,base,after);
-  window.__last={pr,iv,base,after,desc,scn,side,amt,tag:buildIv(scn,side,amt,pr).tag};
+  const proj=projectFc(pr,base,after);         // market marginals + engine delta
+  renderBars(pr,proj);                          // priced line vs the market
+  renderSentence(pr,proj,desc);
+  drawField(pr,iv,base,after);                  // canvas shows the physical orbits
+  window.__last={pr,iv,base,after,proj,desc,scn,side,amt,tag:buildIv(scn,side,amt,pr).tag};
 }
+/* the priced line: apply the engine's directional intervention delta to the
+   market's calibrated marginals (exp25 — market owns marginals, engine the shift) */
+function projectFc(m,base,cf){
+  const raw={};let s=0;LAB.forEach(k=>{raw[k]=Math.max(0,m[k]+(cf[k]-base[k]));s+=raw[k];});
+  const o={};LAB.forEach(k=>o[k]=raw[k]/(s||1));return o;}
 /* build the durable, gradient-ready entry — same schema as orbita.ledger */
 const PYNAME={injury:"injury",red:"red_card",low:"low_tempo",early:"early_pressure"};
 function r6(o){return {home:+o.home.toFixed(6),draw:+o.draw.toFixed(6),away:+o.away.toFixed(6)};}
 function durableEntry(){
   const L=window.__last;if(!L)return null;
-  const {pr,iv,base,after,desc,scn,side,amt}=L;
+  const {pr,iv,base,after,proj,desc,scn,side,amt}=L;
   const masses=applyMass(pr,iv),mom=(iv&&iv.momentum)||[0,0];
   const lock=(iv&&iv.lock)?{on:true,pos:iv.lock.pos,strength:iv.lock.strength}:{on:false};
   const read={scenario:PYNAME[scn],side:(scn==="low"?"":side),description:desc};
@@ -329,7 +337,7 @@ function durableEntry(){
     state:{masses:masses.map(x=>+x.toFixed(6)),momentum:mom.map(x=>+x.toFixed(6)),C_d:C_D,lock,
       constants:{well_home:POS.home,well_draw:POS.draw,well_away:POS.away,softening:Math.sqrt(SOFT2),
         alpha:ALPHA,ic_scale:IC,dt:DT,duration:DUR,seed:42,n_trials:NTR,engine_version:"0.3.7"}},
-    forecast:{base:r6(base),counterfactual:r6(after)}};
+    forecast:{engine_base:r6(base),engine_cf:r6(after),projection:r6(proj)}};
 }
 /* clipboard odds parser: grab the first three decimal prices from a pasted row */
 function parseOdds(text){
@@ -435,7 +443,7 @@ function downloadJSON(obj,name){const b=new Blob([JSON.stringify(obj,null,2)],{t
   const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;a.click();}
 $("logBtn").addEventListener("click",()=>{
   const e=durableEntry();if(!e){toast("Enter valid odds first");return;}
-  const rows=load();rows.unshift({id:e.id,lbl:e.match,tag:e.read.scenario,mkt:e.market.priors,orb:e.forecast.counterfactual,res:null,entry:e});
+  const rows=load();rows.unshift({id:e.id,lbl:e.match,tag:e.read.scenario,mkt:e.market.priors,orb:e.forecast.projection,res:null,entry:e});
   save(rows);$("matchLbl").value="";renderLedger();toast("Logged. Export for the repo before kickoff.");});
 $("copyBtn").addEventListener("click",async()=>{
   const e=durableEntry();if(!e){toast("Enter valid odds first");return;}
