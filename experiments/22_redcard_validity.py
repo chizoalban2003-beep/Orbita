@@ -31,6 +31,7 @@ Run:  PYTHONPATH=src python3 experiments/22_redcard_validity.py
 from __future__ import annotations
 
 import csv
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -48,13 +49,18 @@ SEASONS = ["1516", "1617", "1718", "1819", "1920", "2021", "2122", "2223", "2324
 TRAIN_SEASONS = set(SEASONS[:7])
 # Backtest settings: coarser than the interactive module (dt 0.1, dur 600,
 # 200 trials) for thousands of forecasts. Same geometry + physics.
-N_TRIALS = 120
-DT = 0.25
+# dt/n_trials/sweep are env-tunable so the fine dt=0.1 calibration run can
+# reuse this file without edits (ORBITA_DT=0.1 ORBITA_FINE=1 ...).
+N_TRIALS = int(os.environ.get("ORBITA_NTRIALS", 120))
+DT = float(os.environ.get("ORBITA_DT", 0.25))
 DURATION = 600.0
 IC_SCALE = 2.5
 C_D = 0.04
-K_GRID = [0.0, 0.4, 0.8, 1.2, 1.8, 2.4]
-TRAIN_CAP = 150          # subsample train for the sweep (speed)
+if os.environ.get("ORBITA_FINE"):
+    K_GRID = [0.0, 0.4, 0.7, 1.0, 1.3, 1.6, 1.9, 2.2, 2.6]   # finer near optimum
+else:
+    K_GRID = [0.0, 0.4, 0.8, 1.2, 1.8, 2.4]
+TRAIN_CAP = int(os.environ.get("ORBITA_TRAINCAP", 150))   # subsample for speed
 OUTCOMES = ("home", "draw", "away")
 _POSARR = np.array([_POS[k] for k in OUTCOMES], float)
 
