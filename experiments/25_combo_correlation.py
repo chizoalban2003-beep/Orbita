@@ -159,33 +159,56 @@ def implied_lift(preds, ms):
     return {c: d[c]/(mr[c[0]]*mo[c[1]]) if mr[c[0]]*mo[c[1]] > 0 else 1.0 for c in CELLS}
 
 
+def corr_from_joint(oj, m):
+    """Deploy Orbita as a CORRELATION layer on the MARKET's marginals: extract
+    its per-match lift (joint / product-of-its-own-marginals) and apply it to
+    the market independence product, renormalized. The market owns the marginals
+    (better calibrated — exp22-24); Orbita contributes only the per-match
+    coupling. Parallel to tier-2 but per-match instead of global."""
+    d = {c: oj[i] for i, c in enumerate(CELLS)}
+    rmarg = {r: sum(d[(r, o)] for o in OU) for r in RES}
+    omarg = {o: sum(d[(r, o)] for r in RES) for o in OU}
+    lift = np.array([d[c] / (rmarg[c[0]] * omarg[c[1]])
+                     if rmarg[c[0]] * omarg[c[1]] > 0 else 1.0 for c in CELLS])
+    j = indep_vec(m) * lift
+    return j / j.sum()
+
+
+def orbita_corr(m, pos):
+    return corr_from_joint(orbita_joint(m, pos), m)
+
+
 def bootstrap_ci(diff, n=2000, seed=1):
     rng = np.random.default_rng(seed)
     ms = [rng.choice(diff, size=len(diff), replace=True).mean() for _ in range(n)]
     return float(np.percentile(ms, 5)), float(np.percentile(ms, 95))
 
 
-GAMMA_GRID = [1.0, 1.2, 1.4, 1.6, 1.8]
-TRAIN_TUNE_CAP = int(os.environ.get("ORBITA_TUNECAP", 700))
+GAMMA_GRID = [1.0, 1.3, 1.6, 2.0, 2.5]
+TRAIN_TUNE_CAP = int(os.environ.get("ORBITA_TUNECAP", 400))
+EVAL_CAP = int(os.environ.get("ORBITA_EVALCAP", 1500))
 
 
 def main():
     d = load()
     train = [m for m in d if m["s"] in TRAIN]
     ev = [m for m in d if m["s"] not in TRAIN]
-    print(f"loaded {len(d)}  train={len(train)} eval={len(ev)}  dt={DT} N={N_TRIALS}")
+    rng = np.random.default_rng(0)
+    if len(ev) > EVAL_CAP:
+        ev = [ev[i] for i in rng.choice(len(ev), EVAL_CAP, replace=False)]
+    print(f"loaded {len(d)}  train={len(train)} eval(cap)={len(ev)}  dt={DT} N={N_TRIALS}")
 
     lift = fit_lift(train)
     copula = lambda m: (lambda j: j/j.sum())(indep_vec(m)*np.array([lift[c] for c in CELLS]))
 
-    # tune the correlation-strength gamma on a train subsample (leakage-free)
-    rng = np.random.default_rng(0)
+    # tune gamma on a train subsample by the DEPLOYED objective (orbita_corr:
+    # per-match lift on market marginals), leakage-free.
     tune = [train[i] for i in rng.choice(len(train), min(TRAIN_TUNE_CAP, len(train)), replace=False)]
-    print(f"\nGAMMA tune on train subsample (n={len(tune)}) — 6-cell Brier:")
+    print(f"\nGAMMA tune on train subsample (n={len(tune)}) — orbita_corr 6-cell Brier:")
     best_g, best_b = 1.0, np.inf
     for g in GAMMA_GRID:
         pos = joint_geometry(g)
-        b = np.mean([brier6(orbita_joint(m, pos), m) for m in tune])
+        b = np.mean([brier6(orbita_corr(m, pos), m) for m in tune])
         flag = "  <=" if b < best_b else ""
         if b < best_b:
             best_b, best_g = b, g
@@ -193,22 +216,25 @@ def main():
 
     b1 = np.array([brier6(indep_vec(m), m) for m in ev])
     b2 = np.array([brier6(copula(m), m) for m in ev])
-    for tag, g in [("untuned gamma=1.0", 1.0), (f"train-tuned gamma={best_g}", best_g)]:
+    print(f"\nEVAL 6-cell Brier (n={len(ev)}):  tier1(indep)={b1.mean():.4f}  "
+          f"tier2(global copula)={b2.mean():.4f}")
+    for tag, g in [("gamma=1.0 (untuned)", 1.0), (f"gamma={best_g} (train-tuned)", best_g)]:
         pos = joint_geometry(g)
-        orb = [orbita_joint(m, pos) for m in ev]
-        bo = np.array([brier6(orb[i], ev[i]) for i in range(len(ev))])
-        oimp = implied_lift(orb, ev)
-        print(f"\n=== Orbita {tag} ===")
-        print(f"  correlation lift (empirical | orbita): "
-              + "  ".join(f"{c[0][0]}{c[1][0]}={lift[c]:.2f}|{oimp[c]:.2f}" for c in CELLS))
+        raw = [orbita_joint(m, pos) for m in ev]          # MC once per match
+        bo_raw = np.array([brier6(raw[i], ev[i]) for i in range(len(ev))])
+        bo = np.array([brier6(corr_from_joint(raw[i], ev[i]), ev[i]) for i in range(len(ev))])
+        oimp = implied_lift(raw, ev)
         lo1, hi1 = bootstrap_ci(b1 - bo)
         lo2, hi2 = bootstrap_ci(b2 - bo)
-        print(f"  EVAL 6-cell Brier (n={len(ev)}): tier1={b1.mean():.4f} "
-              f"tier2={b2.mean():.4f} Orbita={bo.mean():.4f}")
+        print(f"\n=== Orbita {tag} ===")
+        print(f"  per-match lift (emp|orb): "
+              + " ".join(f"{c[0][0]}{c[1][0]}={lift[c]:.2f}|{oimp[c]:.2f}" for c in CELLS))
+        print(f"  raw joint Brier (marginals distorted) = {bo_raw.mean():.4f}")
+        print(f"  orbita_corr Brier (market marginals)  = {bo.mean():.4f}")
         print(f"    vs tier-1: Δ {(b1-bo).mean():+.4f} CI[{lo1:+.4f},{hi1:+.4f}]  "
               f"{'BEATS indep' if lo1>0 else 'no'}")
         print(f"    vs tier-2: Δ {(b2-bo).mean():+.4f} CI[{lo2:+.4f},{hi2:+.4f}]  "
-              f"{'BEATS copula = REAL per-match edge' if lo2>0 else 'ties/loses copula'}")
+              f"{'BEATS global copula = PER-MATCH EDGE' if lo2>0 else 'ties/loses global copula'}")
 
 
 if __name__ == "__main__":
