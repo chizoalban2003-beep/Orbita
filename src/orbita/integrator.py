@@ -6,7 +6,8 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 
 from .domain import Body, EventSpace, Observation, Sensor
-from .forces import SOFTENING, gravity_force, drag_force, tidal_force
+from .forces import (SOFTENING, gravity_force, drag_force, tidal_force,
+                     favourite_lock_force)
 
 
 def simulate(
@@ -137,6 +138,7 @@ def simulate_from_state(
     n_saves: int = 500,
     t_start: float = 0.0,
     tidal: Optional[tuple] = None,
+    lock: Optional[tuple] = None,
 ) -> Dict[str, np.ndarray]:
     """Continue a simulation from an explicit ``(q0, p0)`` state.
 
@@ -161,6 +163,11 @@ def simulate_from_state(
     ``t_start + duration`` so it peaks at the whistle regardless of how
     much of the match this spliced segment covers. ``None`` (default)
     reproduces the pre-tidal dynamics exactly.
+
+    ``lock``, when given, is a ``(fav_pos, strength)`` pair enabling the
+    directional favourite-lock drag (:func:`orbita.forces.favourite_lock_force`)
+    — the leading side resisting the state drifting away from its well.
+    ``None`` (default) leaves the dynamics unchanged.
 
     Returns the same dict shape as :func:`simulate`.
     """
@@ -188,6 +195,8 @@ def simulate_from_state(
         F = m * g + drag_force(pv, m, C_d, t=tv)
         if tidal is not None:
             F = F + m * tidal_force(qv, g, tv, t_final, tidal[0], tidal[1])
+        if lock is not None:
+            F = F + m * favourite_lock_force(qv, pv / m, lock[0], lock[1])
         return F
 
     F = total_force(q, p, t_start)

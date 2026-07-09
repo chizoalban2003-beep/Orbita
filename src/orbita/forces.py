@@ -60,6 +60,43 @@ def drag_force(p: np.ndarray, body_mass: float, C_d, t: float = 0.0) -> np.ndarr
     return -coef * (p / body_mass)
 
 
+def favourite_lock_force(q, v, fav_pos, strength: float) -> np.ndarray:
+    """Directional 'game-management' drag — the leading side holds a lead.
+
+    A favourite protecting a lead does not damp *all* motion (that is scalar
+    drag, which bleeds the state into the central draw well — see
+    ``experiments/23_drag_lowtempo_validity.py``). It selectively kills velocity
+    that carries the match state *away* from its own winning well — the
+    opponent's counter-attack — while leaving safe, possession motion toward the
+    well untouched.
+
+    That asymmetry is intrinsically **nonlinear** in ``v``. A linear drag tensor
+    ``F = −C·v`` is symmetric under ``v → −v``: it damps advancing toward the
+    well and retreating from it by the same magnitude, so it can *freeze* motion
+    along an axis but never *bias* it — it cannot hold a lead. Hence a sign-gated
+    radial projection, not a tensor::
+
+        r̂        = (fav_pos − q) / |fav_pos − q|      # toward the favourite's well
+        v_radial  = v · r̂                              # < 0  ⇒ drifting away (losing the lead)
+        F         = −strength · min(v_radial, 0) · r̂   # push back only while retreating
+
+    Vanishes when advancing toward the well (``v_radial ≥ 0``) and when
+    ``strength == 0`` (the identity that keeps un-locked dynamics reproducible).
+    Broadcasts over a leading batch axis, so it serves both the single-body
+    integrator and the vectorised forecaster.
+    """
+    if strength == 0.0:
+        return np.zeros_like(np.asarray(q, dtype=float))
+    q = np.asarray(q, dtype=float)
+    v = np.asarray(v, dtype=float)
+    r = np.asarray(fav_pos, dtype=float) - q
+    dist = np.sqrt((r * r).sum(axis=-1, keepdims=True) + SOFTENING ** 2)
+    r_hat = r / dist
+    v_radial = (v * r_hat).sum(axis=-1, keepdims=True)
+    gate = np.minimum(v_radial, 0.0)                    # only the retreating part
+    return -strength * gate * r_hat
+
+
 def tidal_force(
     q: np.ndarray,
     grav_F: np.ndarray,

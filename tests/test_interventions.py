@@ -22,6 +22,13 @@ def test_injury_lowers_that_side():
     assert _sums_to_one(after)
 
 
+def test_injury_transfers_to_opponent_not_draw():
+    # result-axis law: a weakening moves prob to the OPPONENT, not the draw
+    before, after, _ = reprice(PRIORS, injury("home", 0.30), n_trials=200)
+    assert after["away"] > before["away"]                    # opponent gains
+    assert after["away"] - before["away"] > after["draw"] - before["draw"]
+
+
 def test_red_card_hits_harder_than_injury():
     _, a_inj, _ = reprice(PRIORS, injury("away", 0.30), n_trials=200)
     _, a_red, _ = reprice(PRIORS, red_card("away", 0.30), n_trials=200)
@@ -33,9 +40,12 @@ def test_early_pressure_lifts_that_side():
     assert after["away"] > before["away"]
 
 
-def test_low_tempo_favours_draw():
-    before, after, _ = reprice(PRIORS, low_tempo(1.8), n_trials=200)
-    assert after["draw"] >= before["draw"] - 1e-9    # cagey game lifts the draw
+def test_low_tempo_lifts_the_favourite_not_the_draw():
+    # re-spec (exp 23/24 law): the favourite-lock lifts the FAVOURITE along the
+    # result axis, it does not inflate the central draw well.
+    before, after, _ = reprice(PRIORS, low_tempo(1.0), n_trials=300)
+    assert after["home"] > before["home"]            # home is the favourite here
+    assert after["home"] - before["home"] > after["draw"] - before["draw"]
 
 
 def test_explanation_mentions_a_number():
