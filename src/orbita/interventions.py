@@ -83,13 +83,14 @@ def injury(side: str, severity: float = 0.20) -> Intervention:
         mass_transfer=(side, opponent, severity))
 
 
-def red_card(side: str, severity: float = 0.25,
-             pressure: float = 0.25) -> Intervention:
+def red_card(side: str, severity: float = 0.15,
+             pressure: float = 0.16) -> Intervention:
     """A sending-off: transfer the side's mass to the opponent AND push
     momentum toward the opponent (10 men get pinned back and concede). Both
     levers are directional, so it hurts the carded side more than a like-sized
-    injury (which is the transfer alone). Defaults are illustrative; the
-    validated magnitude (exp 22) lives in the backtest's own units."""
+    injury (which is the transfer alone). Defaults are the Bayesian-calibrated
+    magnitude from experiment 26 (posterior mean ≈0.145 on 60 real single-card
+    matches; was an illustrative 0.25)."""
     opponent = "home" if side == "away" else "away"
     direction = _POS[opponent] / np.linalg.norm(_POS[opponent])
     return Intervention(

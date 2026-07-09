@@ -161,6 +161,9 @@
           <div class="o" data-k="away"><span>Away</span><input id="oA" value="4.35" inputmode="decimal"><div class="imp" id="iA"></div></div>
         </div>
       </label>
+      <button class="act ghost" id="pasteBtn" style="width:100%;padding:7px;margin:-6px 0 6px">📋 Paste odds from broker</button>
+      <textarea id="pasteFallback" placeholder="…paste the copied row here — the first three decimal prices are read"
+        style="display:none;width:100%;height:52px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--ink);font-family:var(--mono);font-size:12px;padding:8px;margin-bottom:10px"></textarea>
 
       <div class="flab" style="margin-top:6px">Your read</div>
       <div class="scen" id="scen">
@@ -200,9 +203,10 @@
   <section class="panel ledger">
     <h2><span class="step">3</span> The Ledger — did the read beat the market?</h2>
     <div class="ledbar">
-      <input id="matchLbl" placeholder="Match label — e.g. Arsenal v Spurs, 12 Jul">
+      <input id="matchLbl" placeholder="Match label — e.g. Rosenborg v Brann, Eliteserien">
       <button class="act" id="logBtn">Log this read</button>
-      <button class="act ghost" id="exportBtn">Export JSON</button>
+      <button class="act ghost" id="copyBtn">Copy entry</button>
+      <button class="act ghost" id="exportBtn">Export for repo</button>
       <button class="act ghost" id="clearBtn">Clear</button>
     </div>
     <div class="summary" id="summary"></div>
@@ -277,7 +281,7 @@ const pct=x=>Math.round(x*100)+"%";
 /* scenario slider config: [label, min, max, default, scaleTo(0..1 amt)] */
 const SCN={
   injury:{lab:"Severity",min:5,max:45,def:20,f:v=>v/100},
-  red:{lab:"Severity",min:10,max:45,def:25,f:v=>v/100},
+  red:{lab:"Severity",min:5,max:45,def:15,f:v=>v/100},
   low:{lab:"Lock strength",min:5,max:60,def:15,f:v=>v/100},
   early:{lab:"Pressure",min:20,max:100,def:60,f:v=>v/100},
 };
@@ -302,7 +306,36 @@ function recompute(){
   renderBars(base,after);
   renderSentence(base,after,desc);
   drawField(pr,iv,base,after);
-  window.__last={pr,base,after,desc,tag:buildIv(scn,side,amt,pr).tag};
+  window.__last={pr,iv,base,after,desc,scn,side,amt,tag:buildIv(scn,side,amt,pr).tag};
+}
+/* build the durable, gradient-ready entry — same schema as orbita.ledger */
+const PYNAME={injury:"injury",red:"red_card",low:"low_tempo",early:"early_pressure"};
+function r6(o){return {home:+o.home.toFixed(6),draw:+o.draw.toFixed(6),away:+o.away.toFixed(6)};}
+function durableEntry(){
+  const L=window.__last;if(!L)return null;
+  const {pr,iv,base,after,desc,scn,side,amt}=L;
+  const masses=applyMass(pr,iv),mom=(iv&&iv.momentum)||[0,0];
+  const lock=(iv&&iv.lock)?{on:true,pos:iv.lock.pos,strength:iv.lock.strength}:{on:false};
+  const read={scenario:PYNAME[scn],side:(scn==="low"?"":side),description:desc};
+  if(scn==="injury")read.severity=amt;
+  else if(scn==="red"){read.severity=amt;read.pressure=Math.min(0.5,amt*1.1);}
+  else if(scn==="low")read.strength=amt; else if(scn==="early")read.pressure=amt;
+  const now=new Date().toISOString().replace(/\.\d+Z$/,"Z");
+  const match=($("matchLbl").value.trim()||("Match "+(load().length+1)));
+  const slug=match.toLowerCase().replace(/[^a-z0-9]+/g,"-").slice(0,32).replace(/^-|-$/g,"");
+  return {id:`${now}-${slug}`,logged_at:now,match,kickoff:"",status:"open",
+    market:{odds:{home:+$("oH").value,draw:+$("oD").value,away:+$("oA").value},priors:r6(pr),source:"repricer"},
+    read,
+    state:{masses:masses.map(x=>+x.toFixed(6)),momentum:mom.map(x=>+x.toFixed(6)),C_d:C_D,lock,
+      constants:{well_home:POS.home,well_draw:POS.draw,well_away:POS.away,softening:Math.sqrt(SOFT2),
+        alpha:ALPHA,ic_scale:IC,dt:DT,duration:DUR,seed:42,n_trials:NTR,engine_version:"0.3.7"}},
+    forecast:{base:r6(base),counterfactual:r6(after)}};
+}
+/* clipboard odds parser: grab the first three decimal prices from a pasted row */
+function parseOdds(text){
+  const m=(text.match(/\b\d{1,2}\.\d{2,3}\b/g)||[]).slice(0,3).map(Number);
+  if(m.length<3||!m.every(x=>x>1))return false;
+  $("oH").value=m[0];$("oD").value=m[1];$("oA").value=m[2];recompute();return true;
 }
 function renderBars(base,after){
   const box=$("bars");box.innerHTML="";
@@ -395,15 +428,31 @@ const LKEY="orbita_ledger_v1";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LKEY))||[];}catch(e){return[];}};
 const save=x=>localStorage.setItem(LKEY,JSON.stringify(x));
 function brier(p,res){return LAB.reduce((s,k)=>s+(p[k]-(k===res?1:0))**2,0);}
+function toast(msg){const t=document.createElement("div");t.textContent=msg;
+  t.style.cssText="position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:9px;font-size:13px;z-index:99;box-shadow:var(--shadow);max-width:90vw;text-align:center";
+  document.body.appendChild(t);setTimeout(()=>t.remove(),3600);}
+function downloadJSON(obj,name){const b=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;a.click();}
 $("logBtn").addEventListener("click",()=>{
-  const L=window.__last;if(!L)return;
-  const lbl=$("matchLbl").value.trim()||("Match "+(load().length+1));
-  const rows=load();rows.unshift({id:Date.now(),lbl,tag:L.tag,mkt:L.pr,orb:L.after,res:null});
-  save(rows);$("matchLbl").value="";renderLedger();});
-$("clearBtn").addEventListener("click",()=>{if(confirm("Clear all logged reads?")){save([]);renderLedger();}});
+  const e=durableEntry();if(!e){toast("Enter valid odds first");return;}
+  const rows=load();rows.unshift({id:e.id,lbl:e.match,tag:e.read.scenario,mkt:e.market.priors,orb:e.forecast.counterfactual,res:null,entry:e});
+  save(rows);$("matchLbl").value="";renderLedger();toast("Logged. Export for the repo before kickoff.");});
+$("copyBtn").addEventListener("click",async()=>{
+  const e=durableEntry();if(!e){toast("Enter valid odds first");return;}
+  try{await navigator.clipboard.writeText(JSON.stringify(e,null,2));
+    toast("Entry copied → save to a file, then: python -m orbita.ledger import --file it.json");}
+  catch(err){downloadJSON([e],"orbita_entry.json");}});
 $("exportBtn").addEventListener("click",()=>{
-  const blob=new Blob([JSON.stringify(load(),null,2)],{type:"application/json"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="orbita_ledger.json";a.click();});
+  const rows=load().filter(r=>r.entry);
+  if(!rows.length){toast("Nothing to export yet");return;}
+  downloadJSON({entry:rows.map(r=>r.entry)},"orbita_ledger_export.json");
+  toast(`Exported ${rows.length} entr${rows.length===1?'y':'ies'} → python -m orbita.ledger import --file …`);});
+$("clearBtn").addEventListener("click",()=>{if(confirm("Clear the local view? (exported/imported entries are safe in the repo)")){save([]);renderLedger();}});
+$("pasteBtn").addEventListener("click",async()=>{
+  try{const t=await navigator.clipboard.readText();if(!parseOdds(t)){_showFallback();}else toast("Odds read from clipboard");}
+  catch(err){_showFallback();}});
+function _showFallback(){const f=$("pasteFallback");f.style.display="block";f.focus();}
+$("pasteFallback").addEventListener("input",e=>{if(parseOdds(e.target.value)){e.target.style.display="none";e.target.value="";toast("Odds read");}});
 function setRes(id,res){const rows=load();const r=rows.find(x=>x.id===id);if(r){r.res=res||null;save(rows);renderLedger();}}
 window.__setRes=setRes;
 function renderLedger(){

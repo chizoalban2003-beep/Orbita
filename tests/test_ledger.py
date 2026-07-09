@@ -63,6 +63,17 @@ def test_report_aggregates_per_scenario(tmp_path):
     assert "injury" in r["agg"] and "red_card" in r["agg"]
 
 
+def test_import_entries_dedups(tmp_path):
+    src = tmp_path / "src.toml"
+    ledger.log_read("Imported", ODDS, red_card("away"), side="away", path=src)
+    entry = ledger.load(src)["entry"][0]
+    dst = tmp_path / "dst.toml"
+    assert ledger.import_entries([entry], path=dst) == 1        # appended
+    assert ledger.import_entries([entry], path=dst) == 0        # deduped by id
+    d = ledger.load(dst)
+    assert len(d["entry"]) == 1 and d["entry"][0]["id"] == entry["id"]
+
+
 def test_emitted_toml_is_valid(tmp_path):
     p = tmp_path / "l.toml"
     ledger.log_read("Round Trip", ODDS, low_tempo(0.2), path=p)

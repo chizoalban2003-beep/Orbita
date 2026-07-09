@@ -185,6 +185,23 @@ def settle(entry_id: str, result: str, *, score: str = "",
     return rec
 
 
+def import_entries(entries, path: Path = DEFAULT_PATH) -> int:
+    """Fold browser-exported entries (from the Artifact) into the durable
+    ledger, appending only ids not already present. The Artifact computes the
+    same gradient-ready schema client-side, so imported entries are faithful,
+    not lossy. Returns the number newly appended."""
+    have = {e["id"] for e in load(path)["entry"]}
+    n = 0
+    for e in entries:
+        eid = e.get("id")
+        if not eid or eid in have:
+            continue
+        _append(path, "entry", e)
+        have.add(eid)
+        n += 1
+    return n
+
+
 def load(path: Path = DEFAULT_PATH) -> Dict:
     if not Path(path).exists():
         return {"entry": [], "settlement": []}
@@ -260,6 +277,9 @@ def _main(argv=None):
     st.add_argument("--result", choices=list(_LAB), required=True)
     st.add_argument("--score", default="")
 
+    im = sub.add_parser("import", help="fold Artifact-exported entries (JSON) into the ledger")
+    im.add_argument("--file", required=True, help="JSON file exported from the repricer tool")
+
     sub.add_parser("report", help="show performance vs the market")
 
     args = p.parse_args(argv)
@@ -280,6 +300,12 @@ def _main(argv=None):
         rec = settle(args.id, args.result, score=args.score)
         print(f"settled: market {rec['brier_market']:.4f}  orbita {rec['brier_orbita']:.4f}  "
               f"edge {rec['edge_vs_market']:+.4f}")
+    elif args.cmd == "import":
+        import json
+        raw = json.loads(Path(args.file).read_text())
+        entries = raw["entry"] if isinstance(raw, dict) else raw
+        n = import_entries(entries)
+        print(f"imported {n} new entr{'y' if n == 1 else 'ies'} (of {len(entries)})")
     elif args.cmd == "report":
         _print_report()
 
