@@ -53,6 +53,9 @@ from orbita.interventions import _POS  # noqa: E402
 CACHE = Path.home() / ".cache" / "orbita" / "footballdata"
 SEASONS = ["1516","1617","1718","1819","1920","2021","2122","2223","2324","2425"]
 TRAIN_SEASONS = set(SEASONS[:7])
+# ORBITA_DIVS pools multiple leagues to firm up the (noisy) drift signal —
+# same Pinnacle open/close selector, purely more sample (exp24 phase 2).
+DIVS = os.environ.get("ORBITA_DIVS", "E0").split(",")
 N_TRIALS = int(os.environ.get("ORBITA_NTRIALS", 150))
 DT = float(os.environ.get("ORBITA_DT", 0.1))
 THR = float(os.environ.get("ORBITA_THR", 0.05))
@@ -61,6 +64,8 @@ THR = float(os.environ.get("ORBITA_THR", 0.05))
 # leaks ~half the mass into the central draw well, which reality does not do.
 TRANSFER = bool(os.environ.get("ORBITA_TRANSFER"))
 PLACEBO_CAP = int(os.environ.get("ORBITA_PLACEBO_CAP", 10_000))
+TRAIN_CAP = int(os.environ.get("ORBITA_TRAINCAP", 10_000))  # tuning one scalar
+                                                            # needs few matches
 DURATION, IC_SCALE, C_D = 600.0, 2.5, 0.04
 C_GRID = [0.0, 0.1, 0.2, 0.3, 0.45, 0.6, 0.75]   # fraction to cut weak well mass
 OUTCOMES = ("home", "draw", "away")
@@ -76,23 +81,24 @@ def devig(h, d, a):
 
 def load():
     out = []
-    for s in SEASONS:
-        f = CACHE / f"E0_{s}.csv"
-        if not f.exists():
-            continue
-        for r in csv.DictReader(f.open(encoding="utf-8-sig")):
-            try:
-                op = devig(float(r["PSH"]), float(r["PSD"]), float(r["PSA"]))
-                cl = devig(float(r["PSCH"]), float(r["PSCD"]), float(r["PSCA"]))
-                res = {"H":"home","D":"draw","A":"away"}[r["FTR"]]
-            except (KeyError, ValueError, ZeroDivisionError):
+    for div in DIVS:
+        for s in SEASONS:
+            f = CACHE / f"{div}_{s}.csv"
+            if not f.exists():
                 continue
-            drift = cl - op
-            weak = "home" if drift[0] <= drift[2] else "away"
-            out.append({"season": s, "op": op, "cl": cl, "res": res,
-                        "weak": weak, "strong": "away" if weak == "home" else "home",
-                        "weak_drop": -min(drift[0], drift[2]),
-                        "max_abs": max(abs(drift[0]), abs(drift[2]))})
+            for r in csv.DictReader(f.open(encoding="utf-8-sig")):
+                try:
+                    op = devig(float(r["PSH"]), float(r["PSD"]), float(r["PSA"]))
+                    cl = devig(float(r["PSCH"]), float(r["PSCD"]), float(r["PSCA"]))
+                    res = {"H":"home","D":"draw","A":"away"}[r["FTR"]]
+                except (KeyError, ValueError, ZeroDivisionError):
+                    continue
+                drift = cl - op
+                weak = "home" if drift[0] <= drift[2] else "away"
+                out.append({"season": s, "div": div, "op": op, "cl": cl, "res": res,
+                            "weak": weak, "strong": "away" if weak == "home" else "home",
+                            "weak_drop": -min(drift[0], drift[2]),
+                            "max_abs": max(abs(drift[0]), abs(drift[2]))})
     return out
 
 
@@ -186,7 +192,10 @@ def main():
     stable = [m for m in data if m["max_abs"] < 0.01][:PLACEBO_CAP]   # placebo pool
     print(f"\n{'*** RESULT-AXIS TRANSFER lever ***' if TRANSFER else '*** symmetric mass-cut lever ***'}")
     train = [m for m in drift if m["season"] in TRAIN_SEASONS]
-    ev = [m for m in drift if m["season"] not in TRAIN_SEASONS]
+    if len(train) > TRAIN_CAP:                       # representative subsample
+        rng = np.random.default_rng(0)
+        train = [train[i] for i in rng.choice(len(train), TRAIN_CAP, replace=False)]
+    ev = [m for m in drift if m["season"] not in TRAIN_SEASONS]   # full eval
     print(f"\nMASS-CUT lever backtest  THR={THR} dt={DT} N={N_TRIALS}")
     print(f"  adverse-drift matches={len(drift)}  train={len(train)} eval={len(ev)}"
           f"  placebo(stable)={len(stable)}")
