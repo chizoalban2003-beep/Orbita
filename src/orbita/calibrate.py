@@ -104,11 +104,11 @@ def historical_prior(lever: str) -> LeverPosterior:
     knowledge before a single live read is logged."""
     grid = _default_grid(lever)
     if lever == "red_card":
-        lp = gaussian_logprior(grid, 0.30, 0.12)
-        prov = "exp22: red-card momentum VALIDATED, beats market"
+        lp = gaussian_logprior(grid, 0.145, 0.045)
+        prov = "exp26: calibrated on 60 red-card matches (corrected exp22's 0.30)"
     elif lever == "injury":
-        lp = gaussian_logprior(grid, 0.12, 0.08)
-        prov = "exp24: result-axis transfer, mechanism confirmed (sub-threshold)"
+        lp = gaussian_logprior(grid, 0.126, 0.05)
+        prov = "exp26: calibrated on 60 drift matches (confirmed exp24)"
     elif lever == "low_tempo":
         lp = gaussian_logprior(grid, 0.15, 0.20)          # broad / weak
         prov = "exp23 scalar REJECTED; favourite-lock re-spec UNVALIDATED"

@@ -30,6 +30,8 @@ DIVS = os.environ.get("ORBITA_DIVS", "E0,E1,D1,SP1,I1,F1").split(",")
 SEASONS = ["1516","1617","1718","1819","1920","2021","2122","2223","2324","2425"]
 NCAL = int(os.environ.get("ORBITA_NCAL", 60))
 NTR = int(os.environ.get("ORBITA_NTRIALS", 60))
+LEVER = os.environ.get("ORBITA_LEVER", "red_card")   # red_card | injury
+THR = float(os.environ.get("ORBITA_THR", 0.05))      # injury: adverse-drift cut
 
 
 def devig(h, d, a):
@@ -58,18 +60,42 @@ def load_redcards():
     return out
 
 
+def load_injury_drift():
+    """Natural experiment for the injury/re-rating lever: the team whose
+    Pinnacle win-prob dropped >= THR open->close is the weakened side (exp24)."""
+    out = []
+    for div in DIVS:
+        for s in SEASONS:
+            f = CACHE / f"{div}_{s}.csv"
+            if not f.exists():
+                continue
+            for r in csv.DictReader(f.open(encoding="utf-8-sig")):
+                try:
+                    op = devig(float(r["PSH"]), float(r["PSD"]), float(r["PSA"]))
+                    cl = devig(float(r["PSCH"]), float(r["PSCD"]), float(r["PSCA"]))
+                    res = {"H":"home","D":"draw","A":"away"}[r["FTR"]]
+                except (KeyError, ValueError, ZeroDivisionError):
+                    continue
+                dh, da = cl["home"] - op["home"], cl["away"] - op["away"]
+                weak = "home" if dh <= da else "away"
+                if -min(dh, da) < THR:
+                    continue
+                out.append({"priors": op, "side": weak, "result": res})
+    return out
+
+
 def main():
-    m = load_redcards()
+    m = load_injury_drift() if LEVER == "injury" else load_redcards()
     rng = np.random.default_rng(0)
     if len(m) > NCAL:
         m = [m[i] for i in rng.choice(len(m), NCAL, replace=False)]
-    print(f"red-card natural experiments: {len(m)} matches  (N={NTR}/forecast)")
+    print(f"{LEVER} natural experiments: {len(m)} matches  (N={NTR}/forecast)")
 
-    prior = historical_prior("red_card")
+    prior = historical_prior(LEVER)
     print("\nPRIOR  (from the campaign, pre-data):")
     print("  " + prior.summary())
 
-    post = calibrate_from_matches("red_card", m, n_trials=NTR)
+    post = calibrate_from_matches(LEVER, m, n_trials=NTR)
     print("\nPOSTERIOR  (trained on past data):")
     print("  " + post.summary())
 

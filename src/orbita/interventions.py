@@ -72,10 +72,12 @@ class Intervention:
 
 # ---- named intervention factories (the user-facing vocabulary) -----------
 
-def injury(side: str, severity: float = 0.20) -> Intervention:
+def injury(side: str, severity: float = 0.14) -> Intervention:
     """A key player out: transfer ``severity`` of that side's win-probability
     to the *opponent* (a result-axis weakening, draw untouched — the mechanism
-    validated in exp 24; a symmetric mass-cut leaks into the draw and fails)."""
+    validated in exp 24; a symmetric mass-cut leaks into the draw and fails).
+    Default is the Bayesian-calibrated magnitude (exp 26, posterior mean ≈0.126
+    on 60 drift matches)."""
     opponent = "home" if side == "away" else "away"
     return Intervention(
         name=f"injury:{side}",
