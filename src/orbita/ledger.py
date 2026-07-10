@@ -47,6 +47,11 @@ _ALPHA = 2.0
 _DT = 0.1
 DEFAULT_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "ledger.toml"
 
+# retrospective magnitude sweep (auto-run at settlement)
+_SWEEP_MAX = 0.5          # θ grid ceiling (user spec); early_pressure widened below
+_SWEEP_STEP = 0.01
+_SWEEP_NTRIALS = 200      # per-θ MC trials; common random numbers keep the curve smooth
+
 
 # --------------------------------------------------------------------------
 # tiny TOML emitter (controlled schema: scalars, arrays, inline tables)
@@ -134,6 +139,81 @@ def project(market: Dict[str, float], engine_base: Dict[str, float],
     return {k: raw[k] / s for k in _LAB}
 
 
+def _logged_theta(entry_id: str, path: Path = DEFAULT_PATH) -> float:
+    """The magnitude the analyst actually logged for an entry (for MLE contrast)."""
+    e = next((e for e in load(path)["entry"] if e["id"] == entry_id), None)
+    if e is None:
+        return float("nan")
+    r = e["read"]
+    for k in ("severity", "pressure", "strength"):
+        if k in r:
+            return float(r[k])
+    return float("nan")
+
+
+def _tv(p: Dict[str, float], q: Dict[str, float]) -> float:
+    """Total-variation distance between two H/D/A distributions, in [0,1]."""
+    return 0.5 * sum(abs(float(p[k]) - float(q[k])) for k in _LAB)
+
+
+def information_alpha(market_open: Dict[str, float], market_close: Dict[str, float],
+                     projection: Dict[str, float]) -> float:
+    """Iα = d(open, orbita) − d(close, orbita), total-variation.
+
+    Positive ⇒ the market drifted *toward* our priced line by kickoff — sharp
+    money validating the private read independently of the 90-minute result.
+    This isolates execution edge (did we beat the pricing mechanism?) from
+    single-sample outcome variance (a 90th-minute penalty ruining one Brier)."""
+    return _tv(market_open, projection) - _tv(market_close, projection)
+
+
+def magnitude_sweep(entry: Dict, result: str, *, n_trials: int = _SWEEP_NTRIALS,
+                    step: float = _SWEEP_STEP, grid_max: Optional[float] = None
+                    ) -> Optional[Dict]:
+    """Retrospective θ-likelihood profile for a settled entry.
+
+    Re-runs the *same* row's projection across a θ grid, holding the market
+    marginals and the entry's seed fixed (common random numbers ⇒ smooth curve),
+    and scores each against the realised ``result``. Returns two aligned arrays:
+
+    * ``likelihood`` = 1 − Brier_orbita(θ)  — the display/MLE surface (argmax =
+      the magnitude that would have minimised Brier for this match).
+    * ``prob_outcome`` = P_projection(result | θ) — the proper per-match
+      likelihood the Bayesian/JAX fold multiplies across matches.
+
+    θ=0 is the market anchor (no-op intervention ⇒ projection==market), so a
+    curve decaying monotonically to 0 means "the lever should not have fired".
+    Returns ``None`` for baseline (no-read) rows and unknown levers."""
+    from .calibrate import make_iv_for
+    lever = entry["read"].get("scenario", "none")
+    if lever in ("none", ""):
+        return None
+    side = entry["read"].get("side") or "home"
+    try:
+        mk = make_iv_for(lever, side)
+    except ValueError:
+        return None
+    if grid_max is None:                       # don't clip the momentum lever's range
+        grid_max = 1.0 if lever == "early_pressure" else _SWEEP_MAX
+    priors = entry["market"]["priors"]
+    seed = int(entry["state"]["constants"].get("seed", 42))
+    base = forecast(priors, None, n_trials=n_trials, seed=seed)   # θ-independent: once
+    n = int(round(grid_max / step)) + 1
+    grid = [round(i * step, 4) for i in range(n)]
+    like, pout = [], []
+    for t in grid:
+        iv = mk(float(t))
+        cf = forecast(priors, iv, n_trials=n_trials, seed=seed) if iv else dict(base)
+        proj = project(priors, base, cf)
+        like.append(round(1.0 - brier(proj, result), 6))
+        pout.append(round(float(proj[result]), 6))
+    mle = grid[int(np.argmax(like))]
+    return {"lever": lever, "side": side, "result": result,
+            "grid_min": 0.0, "grid_max": float(grid_max), "grid_step": float(step),
+            "n_trials": int(n_trials), "mle_theta": float(mle),
+            "likelihood": like, "prob_outcome": pout}
+
+
 def _read_summary(iv: Optional[Intervention], side: str) -> Dict:
     scenario = iv.name.split(":")[0] if iv else "none"
     out = {"scenario": scenario, "side": side,
@@ -179,8 +259,14 @@ def log_read(match: str, odds: Dict[str, float], iv: Optional[Intervention],
 
 
 def settle(entry_id: str, result: str, *, score: str = "",
-           path: Path = DEFAULT_PATH) -> Dict:
-    """Append an immutable settlement for a logged entry and return its metrics."""
+           close_odds: Optional[Dict[str, float]] = None, sweep: bool = True,
+           sweep_ntrials: int = _SWEEP_NTRIALS, path: Path = DEFAULT_PATH) -> Dict:
+    """Append an immutable settlement for a logged entry and return its metrics.
+
+    Always emits the retrospective :func:`magnitude_sweep` (``sweep=True``) so
+    every settlement — not just the memorable ones — writes its exact
+    θ-likelihood profile into the corpus (no selective-observation bias). Pass
+    ``close_odds`` (the closing 1X2 line) to also log Information-Alpha."""
     if result not in _LAB:
         raise ValueError(f"result must be one of {_LAB}, got {result!r}")
     data = load(path)
@@ -196,6 +282,15 @@ def settle(entry_id: str, result: str, *, score: str = "",
            "brier_market": round(b_mkt, 6), "brier_base": round(b_base, 6),
            "brier_orbita": round(b_orb, 6),
            "edge_vs_market": round(b_mkt - b_orb, 6), "settled_at": _now()}
+    if close_odds is not None:
+        close = devig(close_odds)
+        rec["market_close"] = {k: round(float(close[k]), 6) for k in _LAB}
+        rec["information_alpha"] = round(
+            information_alpha(mkt, close, fc["projection"]), 6)
+    if sweep:
+        sw = magnitude_sweep(entry, result, n_trials=sweep_ntrials)
+        if sw is not None:
+            rec["magnitude_sweep"] = sw
     _append(path, "settlement", rec)
     return rec
 
@@ -235,15 +330,19 @@ def report(path: Path = DEFAULT_PATH) -> Dict:
     agg: Dict[str, Dict] = {}
     for e, s in rows:
         for key in ("__all__", e["read"]["scenario"]):
-            a = agg.setdefault(key, {"n": 0, "mkt": 0.0, "orb": 0.0, "base": 0.0, "win": 0})
+            a = agg.setdefault(key, {"n": 0, "mkt": 0.0, "orb": 0.0, "base": 0.0,
+                                     "win": 0, "ia": 0.0, "n_ia": 0})
             a["n"] += 1
             a["mkt"] += s["brier_market"]; a["orb"] += s["brier_orbita"]
             a["base"] += s["brier_base"]
             a["win"] += 1 if s["brier_orbita"] < s["brier_market"] else 0
+            if "information_alpha" in s:
+                a["ia"] += s["information_alpha"]; a["n_ia"] += 1
     for a in agg.values():
         if a["n"]:
             a["mkt"] /= a["n"]; a["orb"] /= a["n"]; a["base"] /= a["n"]
             a["edge"] = a["mkt"] - a["orb"]
+            a["info_alpha"] = a["ia"] / a["n_ia"] if a["n_ia"] else None
     return {"n_entries": len(data["entry"]), "n_settled": len(rows), "agg": agg}
 
 
@@ -254,13 +353,14 @@ def _print_report(path: Path = DEFAULT_PATH) -> None:
         print("  (nothing settled yet — log reads before kickoff, settle after)")
         return
     print(f"\n  {'scenario':<14}{'n':>4}{'Brier mkt':>11}{'Brier orb':>11}"
-          f"{'edge':>9}{'win%':>7}")
+          f"{'edge':>9}{'win%':>7}{'InfoA':>9}")
     order = ["__all__"] + sorted(k for k in r["agg"] if k != "__all__")
     for k in order:
         a = r["agg"][k]
         name = "ALL" if k == "__all__" else k
+        ia = f"{a['info_alpha']:+.4f}" if a.get("info_alpha") is not None else "   —"
         print(f"  {name:<14}{a['n']:>4}{a['mkt']:>11.4f}{a['orb']:>11.4f}"
-              f"{a['edge']:>+9.4f}{a['win']/a['n']*100:>6.0f}%")
+              f"{a['edge']:>+9.4f}{a['win']/a['n']*100:>6.0f}%{ia:>9}")
     e = r["agg"]["__all__"]["edge"]
     print(f"\n  {'human+tool BEATS market (edge>0, small sample)' if e > 0 else 'human+tool trails the market — the honest default'}")
 
@@ -291,6 +391,11 @@ def _main(argv=None):
     st.add_argument("--id", required=True)
     st.add_argument("--result", choices=list(_LAB), required=True)
     st.add_argument("--score", default="")
+    st.add_argument("--close-home", type=float, help="closing line (for Info-Alpha)")
+    st.add_argument("--close-draw", type=float)
+    st.add_argument("--close-away", type=float)
+    st.add_argument("--no-sweep", action="store_true",
+                    help="skip the retrospective magnitude sweep")
 
     im = sub.add_parser("import", help="fold Artifact-exported entries (JSON) into the ledger")
     im.add_argument("--file", required=True, help="JSON file exported from the repricer tool")
@@ -312,9 +417,22 @@ def _main(argv=None):
                        iv, side=args.side, kickoff=args.kickoff)
         print(f"logged {eid}")
     elif args.cmd == "settle":
-        rec = settle(args.id, args.result, score=args.score)
+        close = None
+        if None not in (args.close_home, args.close_draw, args.close_away):
+            close = {"home": args.close_home, "draw": args.close_draw,
+                     "away": args.close_away}
+        rec = settle(args.id, args.result, score=args.score, close_odds=close,
+                     sweep=not args.no_sweep)
         print(f"settled: market {rec['brier_market']:.4f}  orbita {rec['brier_orbita']:.4f}  "
               f"edge {rec['edge_vs_market']:+.4f}")
+        if "magnitude_sweep" in rec:
+            sw = rec["magnitude_sweep"]
+            print(f"  sweep: MLE θ̂ = {sw['mle_theta']:.2f}  "
+                  f"(logged read used {_logged_theta(rec['entry_id']):.2f})")
+        if "information_alpha" in rec:
+            ia = rec["information_alpha"]
+            verdict = "market drifted TOWARD us" if ia > 0 else "market drifted away"
+            print(f"  Info-Alpha: {ia:+.4f}  ({verdict})")
     elif args.cmd == "import":
         import json
         raw = json.loads(Path(args.file).read_text())

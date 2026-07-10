@@ -82,3 +82,57 @@ def test_emitted_toml_is_valid(tmp_path):
     # parses cleanly with the stdlib reader — no emitter corruption
     with p.open("rb") as fh:
         tomllib.load(fh)
+
+
+def test_magnitude_sweep_is_auto_written_and_anchored(tmp_path):
+    p = tmp_path / "l.toml"
+    eid = ledger.log_read("Sweep", ODDS, injury("home", 0.25), side="home",
+                          n_trials=80, path=p)
+    rec = ledger.settle(eid, "away", sweep_ntrials=80, path=p)
+    sw = rec["magnitude_sweep"]
+    grid = [round(i * sw["grid_step"], 4) for i in range(len(sw["likelihood"]))]
+    # aligned arrays over the full grid, both surfaces present
+    assert len(sw["likelihood"]) == len(sw["prob_outcome"]) == len(grid)
+    assert sw["lever"] == "injury" and sw["result"] == "away"
+    # θ=0 is the market anchor: L(0) == 1 - Brier_market exactly
+    assert abs(sw["likelihood"][0] - (1.0 - rec["brier_market"])) < 1e-6
+    # MLE is the argmax of the likelihood surface, and is on the grid
+    assert sw["mle_theta"] == grid[max(range(len(grid)), key=lambda i: sw["likelihood"][i])]
+    # survives the tomllib round-trip (long inline array inside the settlement)
+    d = ledger.load(p)
+    assert len(d["settlement"][0]["magnitude_sweep"]["likelihood"]) == len(grid)
+
+
+def test_sweep_mle_decays_to_zero_when_read_was_wrong(tmp_path):
+    # transfer home->away, but home actually wins: more transfer only hurts,
+    # so the likelihood decays and the MLE pins at the bottom of the grid
+    # (θ=0.00/0.01 are a statistical tie, so allow the noise neighbour).
+    p = tmp_path / "l.toml"
+    eid = ledger.log_read("Wrong", ODDS, injury("home", 0.3), side="home",
+                          n_trials=80, path=p)
+    sw = ledger.settle(eid, "home", sweep_ntrials=80, path=p)["magnitude_sweep"]
+    assert sw["mle_theta"] <= 0.02
+    assert sw["likelihood"][0] > sw["likelihood"][-1]
+
+
+def test_information_alpha_sign(tmp_path):
+    p = tmp_path / "l.toml"
+    # read pushes home->away; a close that SHORTENS away (raises away prob) and
+    # lengthens home is a drift TOWARD our priced line ⇒ Iα > 0.
+    eid = ledger.log_read("IA", ODDS, injury("home", 0.3), side="home",
+                          n_trials=80, path=p)
+    toward = ledger.settle(eid, "away", close_odds={"home": 2.4, "draw": 3.7, "away": 3.6},
+                           sweep=False, path=p)
+    assert toward["information_alpha"] > 0
+    # no closing line => no Info-Alpha key
+    eid2 = ledger.log_read("noIA", ODDS, injury("home", 0.3), side="home",
+                           n_trials=80, path=p)
+    plain = ledger.settle(eid2, "away", sweep=False, path=p)
+    assert "information_alpha" not in plain
+
+
+def test_baseline_row_has_no_sweep(tmp_path):
+    p = tmp_path / "l.toml"
+    eid = ledger.log_read("Flat", ODDS, None, path=p)
+    rec = ledger.settle(eid, "home", path=p)
+    assert "magnitude_sweep" not in rec
