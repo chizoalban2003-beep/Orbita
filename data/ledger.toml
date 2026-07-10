@@ -9,3 +9,14 @@ read = {scenario = "injury", side = "away", description = "away weakened by 25% 
 state = {masses = [0.41851536, 0.24744027, 0.33404437], momentum = [0.0, 0.0], C_d = 0.04, lock = {on = false}, constants = {well_home = [5.0, 0.0], well_draw = [0.0, 5.0], well_away = [-5.0, 0.0], softening = 0.5, alpha = 2.0, ic_scale = 2.5, dt = 0.1, duration = 600.0, seed = 42, n_trials = 300, engine_version = "0.3.7"}}
 forecast = {engine_base = {home = 0.303295, draw = 0.242158, away = 0.454547}, engine_cf = {home = 0.414407, draw = 0.245442, away = 0.340151}, projection = {home = 0.418279, draw = 0.250724, away = 0.330997}}
 
+[[entry]]
+id = "2026-07-10T04:59:30+00:00-sandefjord-v-hamkam--eliteserien"
+logged_at = "2026-07-10T04:59:30+00:00"
+match = "Sandefjord v HamKam (Eliteserien, 12 Jul)"
+kickoff = "2026-07-12"
+status = "open"
+market = {odds = {home = 1.83, draw = 3.5, away = 3.5}, priors = {home = 0.488827, draw = 0.255587, away = 0.255587}, source = "Eliteserien — stylistic read (HamKam high-press vs Sandefjord slow build)"}
+read = {scenario = "early_pressure", side = "away", description = "away starts on top (early momentum +0.1)", pressure = 0.15}
+state = {masses = [0.48882682, 0.25558659, 0.25558659], momentum = [-0.15, 0.0], C_d = 0.04, lock = {on = false}, constants = {well_home = [5.0, 0.0], well_draw = [0.0, 5.0], well_away = [-5.0, 0.0], softening = 0.5, alpha = 2.0, ic_scale = 2.5, dt = 0.1, duration = 600.0, seed = 42, n_trials = 300, engine_version = "0.3.7"}}
+forecast = {engine_base = {home = 0.498201, draw = 0.232616, away = 0.269182}, engine_cf = {home = 0.336478, draw = 0.275499, away = 0.388023}, projection = {home = 0.327103, draw = 0.298469, away = 0.374428}}
+
