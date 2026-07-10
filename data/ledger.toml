@@ -1,0 +1,11 @@
+[[entry]]
+id = "2026-07-10T04:52:59+00:00-aalesunds-v-molde--eliteserien"
+logged_at = "2026-07-10T04:52:59+00:00"
+match = "Aalesunds v Molde (Eliteserien, 11 Jul)"
+kickoff = "2026-07-11"
+status = "open"
+market = {odds = {home = 2.9, draw = 3.6, away = 2.0}, priors = {home = 0.307167, draw = 0.24744, away = 0.445392}, source = "Eliteserien — local Romsdal team news (GK + CB out)"}
+read = {scenario = "injury", side = "away", description = "away weakened by 25% (key player out)", severity = 0.25}
+state = {masses = [0.41851536, 0.24744027, 0.33404437], momentum = [0.0, 0.0], C_d = 0.04, lock = {on = false}, constants = {well_home = [5.0, 0.0], well_draw = [0.0, 5.0], well_away = [-5.0, 0.0], softening = 0.5, alpha = 2.0, ic_scale = 2.5, dt = 0.1, duration = 600.0, seed = 42, n_trials = 300, engine_version = "0.3.7"}}
+forecast = {engine_base = {home = 0.303295, draw = 0.242158, away = 0.454547}, engine_cf = {home = 0.414407, draw = 0.245442, away = 0.340151}, projection = {home = 0.418279, draw = 0.250724, away = 0.330997}}
+
