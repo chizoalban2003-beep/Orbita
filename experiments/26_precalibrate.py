@@ -30,8 +30,9 @@ DIVS = os.environ.get("ORBITA_DIVS", "E0,E1,D1,SP1,I1,F1").split(",")
 SEASONS = ["1516","1617","1718","1819","1920","2021","2122","2223","2324","2425"]
 NCAL = int(os.environ.get("ORBITA_NCAL", 60))
 NTR = int(os.environ.get("ORBITA_NTRIALS", 60))
-LEVER = os.environ.get("ORBITA_LEVER", "red_card")   # red_card | injury
+LEVER = os.environ.get("ORBITA_LEVER", "red_card")   # red_card | injury | early_pressure
 THR = float(os.environ.get("ORBITA_THR", 0.05))      # injury: adverse-drift cut
+HTMAX = int(os.environ.get("ORBITA_HTMAX", 1))       # early_pressure: max HT margin
 
 
 def devig(h, d, a):
@@ -84,8 +85,41 @@ def load_injury_drift():
     return out
 
 
+def load_early_pressure():
+    """Natural experiment for the momentum lever: the side leading at half-time
+    is the side that 'started on top' (early_pressure). Restricted to narrow HT
+    leads (|HTHG-HTAG| <= HTMAX, default 1) so the instrument leans toward an
+    early *edge* rather than accumulated dominance — a half-time lead still
+    carries a goal (mass), so the fitted magnitude is an UPPER bound on pure
+    early momentum. Prior = pre-match closing devig, ground truth = FTR."""
+    out = []
+    for div in DIVS:
+        for s in SEASONS:
+            f = CACHE / f"{div}_{s}.csv"
+            if not f.exists():
+                continue
+            for r in csv.DictReader(f.open(encoding="utf-8-sig")):
+                try:
+                    htr = r["HTR"]
+                    if htr not in ("H", "A"):
+                        continue
+                    mg = abs(int(r["HTHG"]) - int(r["HTAG"]))
+                    if mg < 1 or mg > HTMAX:
+                        continue
+                    pri = devig(float(r["PSCH"]), float(r["PSCD"]), float(r["PSCA"]))
+                    res = {"H":"home","D":"draw","A":"away"}[r["FTR"]]
+                except (KeyError, ValueError, ZeroDivisionError):
+                    continue
+                out.append({"priors": pri, "side": "home" if htr == "H" else "away",
+                            "result": res})
+    return out
+
+
+_LOADERS = {"injury": load_injury_drift, "early_pressure": load_early_pressure}
+
+
 def main():
-    m = load_injury_drift() if LEVER == "injury" else load_redcards()
+    m = _LOADERS.get(LEVER, load_redcards)()
     rng = np.random.default_rng(0)
     if len(m) > NCAL:
         m = [m[i] for i in rng.choice(len(m), NCAL, replace=False)]

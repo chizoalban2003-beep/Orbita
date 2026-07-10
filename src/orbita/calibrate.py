@@ -109,6 +109,9 @@ def historical_prior(lever: str) -> LeverPosterior:
     elif lever == "injury":
         lp = gaussian_logprior(grid, 0.126, 0.05)
         prov = "exp26: calibrated on 60 drift matches (confirmed exp24)"
+    elif lever == "early_pressure":
+        lp = gaussian_logprior(grid, 0.205, 0.055)
+        prov = "exp26: calibrated on 60 narrow-HT-lead matches (momentum upper bound)"
     elif lever == "low_tempo":
         lp = gaussian_logprior(grid, 0.15, 0.20)          # broad / weak
         prov = "exp23 scalar REJECTED; favourite-lock re-spec UNVALIDATED"

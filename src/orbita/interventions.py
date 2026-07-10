@@ -117,8 +117,11 @@ def low_tempo(strength: float = 0.15) -> Intervention:
         lock=("favourite", strength))
 
 
-def early_pressure(side: str, magnitude: float = 0.6) -> Intervention:
-    """One side starts on top: an initial momentum push toward its well."""
+def early_pressure(side: str, magnitude: float = 0.205) -> Intervention:
+    """One side starts on top: an initial momentum push toward its well.
+    Default is the Bayesian-calibrated magnitude (exp 26, posterior mean ≈0.205
+    on 60 narrow half-time-lead matches; the HT-lead instrument carries a goal,
+    so this is an upper bound on pure early momentum)."""
     target = _POS[side]
     direction = target / np.linalg.norm(target)
     return Intervention(
